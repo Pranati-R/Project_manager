@@ -1,0 +1,15 @@
+{
+  "projects": [
+    {
+      "id": "prajna",
+      "name": "Prajna",
+      "prefix": "/prajna",
+      "frontend": { "host": "127.0.0.1", "port": 8200, "path_mode": "subpath" },
+      "backend": { "host": "127.0.0.1", "port": 8201, "api_path": "/api", "api_mode": "strip_prefix", "buffering": false },
+      "app_kind": "vite_dev",
+      "pass_host_header": false,
+      "runtime": "other",
+      "notes": "Example created at setup. Edit it to match how Prajna runs, or delete it."
+    }
+  ]
+}

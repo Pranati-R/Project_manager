@@ -1,0 +1,10 @@
+#!/bin/sh
+# /usr/sbin/nginx-gateway-helper: the root helper the dashboard may run through sudo
+# (see /etc/sudoers.d/nginx-gateway). Runs the helper from the root-owned live code, or
+# the copy shipped in the package, with the system python in isolated mode.
+for h in /opt/nginx-gateway/app/backend/gateway_manager/nginx_helper.py \
+         /usr/share/nginx-gateway/src/backend/gateway_manager/nginx_helper.py; do
+    [ -f "$h" ] && exec /usr/bin/python3 -I "$h" "$@"
+done
+echo '{"ok": false, "stage": "helper", "message": "nginx_helper.py not found; reinstall nginx-gateway"}'
+exit 1

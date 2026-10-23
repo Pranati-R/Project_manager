@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+dist/
+*.egg-info/
+.env
+# local dev state (GWM_STATE_DIR when running the manager on a laptop)
+.dev-state/
+tests/fixtures/vite-app/node_modules/

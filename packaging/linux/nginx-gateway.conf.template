@@ -1,0 +1,10 @@
+# Nginx Gateway settings, read by nginx-gateway-ctl and the manager service.
+# Ports, projects and allowed networks are set in the dashboard, not here.
+
+# Where `nginx-gateway-ctl setup` and `update-code` get the code
+# (change with: sudo nginx-gateway-ctl set-repo <url> [branch])
+GIT_REPO_URL=https://github.com/Vcode7/nginx-gateway.git
+GIT_BRANCH=main
+
+# Dashboard backend; always bound to 127.0.0.1 (nginx proxies the admin port to it)
+MANAGER_PORT=8790

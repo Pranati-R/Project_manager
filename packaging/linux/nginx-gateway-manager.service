@@ -1,0 +1,23 @@
+[Unit]
+Description=Nginx Gateway Manager (dashboard API on 127.0.0.1)
+After=network-online.target nginx.service
+Wants=network-online.target
+ConditionPathExists=/opt/nginx-gateway/state/setup-complete
+
+[Service]
+Type=simple
+User=nginx-gw
+Group=nginx-gw
+ExecStart=/usr/bin/nginx-gateway-ctl _run-manager
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+# Hardening that still lets the manager run its one sudo rule (the helper writes
+# /etc/nginx/nginx-gateway and reloads nginx). NoNewPrivileges is deliberately not set:
+# it would stop sudo from working.
+ProtectSystem=true
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

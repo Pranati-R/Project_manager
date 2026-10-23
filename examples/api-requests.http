@@ -1,0 +1,32 @@
+# Driving the manager API directly (e.g. from a script on the server).
+# The API is on 127.0.0.1:8790 (or through nginx on the admin port, 8281).
+# Every request that changes something needs the session cookie and the X-CSRF-Token
+# returned by login.
+
+### Log in
+POST http://127.0.0.1:8790/api/auth/login
+Content-Type: application/json
+
+{"username": "a@g.com", "password": "123456"}
+
+### Add a project (saved, tested with nginx -t and applied)
+POST http://127.0.0.1:8790/api/projects
+Content-Type: application/json
+X-CSRF-Token: {{csrf}}
+
+{
+  "id": "notes", "name": "Notes", "prefix": "/notes",
+  "frontend": {"host": "127.0.0.1", "port": 8400, "path_mode": "strip"},
+  "app_kind": "static_dist"
+}
+
+### Disable / enable
+POST http://127.0.0.1:8790/api/projects/notes/disable
+X-CSRF-Token: {{csrf}}
+
+### Test connectivity (direct and through the gateway)
+POST http://127.0.0.1:8790/api/projects/notes/test
+X-CSRF-Token: {{csrf}}
+
+### Generated config and diff against the live file
+GET http://127.0.0.1:8790/api/config/preview

@@ -1,0 +1,24 @@
+# A Vite SPA in Docker that works at / and under a gateway path.
+#
+#   docker build --build-arg VITE_BASE_PATH=/smart-app/ -t smart-app .
+#   docker run -d --name smart-app --restart unless-stopped -p 127.0.0.1:8300:80 smart-app
+#
+# In the dashboard: prefix /smart-app, frontend 127.0.0.1:8300, app type "Built files from a
+# static server" (path mode "strip"). The container keeps serving dist/ at its own root.
+# Publish on 127.0.0.1 only: ports published by Docker bypass ufw.
+
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+ARG VITE_BASE_PATH=/
+ARG VITE_API_BASE=
+ENV VITE_API_BASE=$VITE_API_BASE
+RUN npx vite build --base ${VITE_BASE_PATH}
+
+FROM nginx:1.27-alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+# SPA fallback: unknown paths get index.html (client-side routes)
+RUN printf 'server {\n  listen 80;\n  root /usr/share/nginx/html;\n  location / { try_files $uri $uri/ /index.html; }\n}\n' \
+    > /etc/nginx/conf.d/default.conf

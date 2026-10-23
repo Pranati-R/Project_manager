@@ -1,0 +1,590 @@
+#!/usr/bin/env bash
+# nginx-gateway-ctl: set up, update and control the Nginx Gateway Manager on Ubuntu.
+# Installed as /usr/bin/nginx-gateway-ctl (a shim that runs this file from the live code).
+# Run `nginx-gateway-ctl help` for the commands.
+
+PREFIX=/opt/nginx-gateway
+APP=$PREFIX/app
+VENV=$PREFIX/venv
+STATE=$PREFIX/state
+ETC=/etc/nginx-gateway
+CONF=$ETC/nginx-gateway.conf
+MANIFEST=$ETC/install-manifest
+DATA=/var/lib/nginx-gateway
+BACKUPS=/var/backups/nginx-gateway
+LOGDIR=/var/log/nginx-gateway
+SHARE=/usr/share/nginx-gateway
+SVC=nginx-gateway-manager.service
+RUN_USER=nginx-gw
+STUB=/etc/nginx/conf.d/nginx-gateway.conf
+LIVE=/etc/nginx/nginx-gateway/gateway.conf
+
+YES=0
+FRESH_NGINX=0
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+if [ -t 1 ]; then B=$'\e[1m'; G=$'\e[32m'; R=$'\e[31m'; Y=$'\e[33m'; N=$'\e[0m'; else B=; G=; R=; Y=; N=; fi
+say()  { echo "${B}==>${N} $*"; }
+ok()   { echo "  ${G}ok${N}  $*"; }
+warn() { echo "  ${Y}!!${N}  $*" >&2; }
+die()  { echo "${R}error:${N} $*" >&2; exit 1; }
+
+need_root() { [ "$(id -u)" = "0" ] || die "this command needs root: sudo nginx-gateway-ctl $*"; }
+have_systemd() { [ -d /run/systemd/system ]; }
+sha() { sha256sum "$@" 2>/dev/null | awk '{print $1}'; }
+
+conf_get() {  # conf_get FILE KEY -> value of the last KEY= line
+    [ -r "$1" ] || return 0
+    sed -n "s/^$2=//p" "$1" | tail -n 1 | sed -e 's/^"\(.*\)"$/\1/' -e 's/[[:space:]]*$//'
+}
+conf_set() {  # conf_set FILE KEY VALUE (keeps the file's owner and mode)
+    touch "$1"
+    if grep -q "^$2=" "$1" 2>/dev/null; then
+        local tmp; tmp=$(mktemp)
+        awk -v k="$2" -v v="$3" 'BEGIN{FS=OFS="="} $1==k{print k "=" v; next} {print}' "$1" > "$tmp"
+        cat "$tmp" > "$1"; rm -f "$tmp"
+    else
+        printf '%s=%s\n' "$2" "$3" >> "$1"
+    fi
+}
+
+load_conf() {
+    GIT_REPO_URL=$(conf_get "$CONF" GIT_REPO_URL)
+    GIT_BRANCH=$(conf_get "$CONF" GIT_BRANCH); GIT_BRANCH=${GIT_BRANCH:-main}
+    MANAGER_PORT=$(conf_get "$CONF" MANAGER_PORT); MANAGER_PORT=${MANAGER_PORT:-8790}
+}
+
+# The checkout is owned by root; safe.directory lets other users read it (status, version)
+gitapp() { git -c safe.directory="$APP" -C "$APP" "$@"; }
+
+stamp_ok()  { [ "$(cat "$STATE/$1" 2>/dev/null)" = "$2" ]; }
+stamp_set() { mkdir -p "$STATE"; printf '%s\n' "$2" > "$STATE/$1"; }
+
+port_owner() {  # port_owner PORT -> program names listening on it (empty when free)
+    ss -ltnpH "sport = :$1" 2>/dev/null | grep -o '(("[^"]*"' | tr -d '("' | sort -u | tr '\n' ' '
+}
+
+confirm() {  # confirm QUESTION -> 0 for yes (always yes with --yes)
+    [ "$YES" = "1" ] && return 0
+    if [ ! -t 0 ]; then die "$1 (not answered: run interactively, or add --yes)"; fi
+    local a; read -r -p "  $1 [y/N] " a
+    [[ "$a" =~ ^[Yy] ]]
+}
+
+src_dir() {  # where the code is: the live checkout, or the copy shipped in the package
+    if [ -d "$APP/backend" ]; then echo "$APP"; else echo "$SHARE/src"; fi
+}
+
+gwm() {  # the manager CLI, run as the service account
+    runuser -u "$RUN_USER" -- env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME="$DATA" LANG=C.UTF-8 \
+        GWM_STATE_DIR="$DATA" GWM_MANAGER_PORT="$MANAGER_PORT" GWM_FRONTEND_DIR="$APP/frontend" \
+        GWM_SEED_FILE="$APP/examples/seed-projects.json" PYTHONPATH="$APP/backend" \
+        "$VENV/bin/python" -m gateway_manager "$@"
+}
+
+start_logging() {  # copy everything this command prints into a log file
+    mkdir -p "$LOGDIR"; chmod 700 "$LOGDIR"
+    exec > >(tee -a "$LOGDIR/$1.log") 2>&1
+    echo "---- $(date -Is) nginx-gateway-ctl $1"
+}
+
+wait_healthy() {  # wait_healthy SECONDS
+    local i
+    for ((i = 0; i < $1; i++)); do
+        curl -fsS -m 2 "http://127.0.0.1:$MANAGER_PORT/api/health" >/dev/null 2>&1 && return 0
+        sleep 1
+    done
+    return 1
+}
+
+manifest_get() { conf_get "$MANIFEST" "$1"; }
+manifest_set() { mkdir -p "$ETC"; conf_set "$MANIFEST" "$1" "$2"; chmod 644 "$MANIFEST"; }
+
+tailscale_hosts() {
+    local h=""
+    if command -v tailscale >/dev/null 2>&1; then
+        h=$(tailscale status --json --self --peers=false 2>/dev/null | python3 -c \
+            'import json,sys; d=json.load(sys.stdin).get("Self",{}); print((d.get("DNSName") or "").rstrip("."))' 2>/dev/null)
+        h="$h $(tailscale ip -4 2>/dev/null | head -n 1)"
+    fi
+    h=$(echo "$h" | xargs)
+    [ -n "$h" ] || h=$(hostname -I 2>/dev/null | awk '{print $1}')
+    echo "${h:-<server-ip>}"
+}
+
+# ── setup steps (each is skipped when its inputs did not change) ─────────────
+step_preflight() {
+    say "Checking this server"
+    if [ -r /etc/os-release ]; then
+        . /etc/os-release
+        if [ "${ID:-}" = "ubuntu" ]; then ok "$PRETTY_NAME"; else warn "built for Ubuntu; this is ${PRETTY_NAME:-unknown}. Continuing."; fi
+    fi
+    have_systemd || die "systemd is not running; the gateway needs it for nginx and the manager service"
+    python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null \
+        || die "Python 3.10 or newer is needed (found $(python3 --version 2>&1))"
+    ok "$(python3 --version 2>&1), systemd"
+
+    local p80; p80=$(port_owner 80)
+    if [ -n "$p80" ]; then ok "port 80 belongs to: $p80- it is not touched"; else ok "nothing listens on port 80"; fi
+
+    if command -v nginx >/dev/null 2>&1; then
+        local sites=0
+        [ -d /etc/nginx/sites-enabled ] && sites=$(find /etc/nginx/sites-enabled -mindepth 1 -maxdepth 1 | wc -l)
+        ok "$(nginx -v 2>&1 | sed 's/nginx version: //') is installed ($(systemctl is-active nginx 2>/dev/null), $sites enabled site(s)); its files are not changed"
+    else
+        ok "nginx is not installed: setup installs it without starting it on port 80"
+    fi
+
+    local gp=${GATEWAY_PORT:-8280} ap=${ADMIN_PORT:-8281} port owner
+    if [ ! -f "$STATE/setup-complete" ]; then
+        for port in "$gp" "$ap" "$MANAGER_PORT"; do
+            owner=$(port_owner "$port")
+            [ -z "$owner" ] || die "port $port is already used by: $owner- choose others with --gateway-port / --admin-port, or MANAGER_PORT in $CONF"
+        done
+        ok "ports $gp (gateway), $ap (dashboard) and 127.0.0.1:$MANAGER_PORT (manager) are free"
+    fi
+
+    if [ ! -f "$STATE/setup-complete" ]; then
+        say "Setup will add only these (nothing existing is edited)"
+        echo "    $STUB          one include line"
+        echo "    /etc/nginx/nginx-gateway/gateway.conf          the generated routes"
+        echo "    user $RUN_USER, $PREFIX, $DATA, $BACKUPS"
+        echo "    /etc/sudoers.d/nginx-gateway (only: run the gateway helper)"
+        echo "    service $SVC on 127.0.0.1:$MANAGER_PORT"
+        confirm "Continue?" || die "cancelled"
+    fi
+}
+
+step_baseline() {  # the isolation baseline, taken once before anything changes
+    [ -f "$STATE/baseline/baseline.json" ] && return 0
+    mkdir -p "$STATE"
+    python3 -I "$(src_dir)/backend/gateway_manager/isolation.py" snapshot "$STATE/baseline" >/dev/null \
+        && ok "recorded the state of nginx, Apache, ports and services (verify later: nginx-gateway-ctl verify-isolation)"
+}
+
+step_backup() {
+    [ -d /etc/nginx ] || return 0
+    mkdir -p "$BACKUPS"; chmod 700 "$BACKUPS"
+    local f; f="$BACKUPS/etc-nginx-$(date -u +%Y%m%dT%H%M%SZ).tar.gz"
+    tar -czf "$f" -C / etc/nginx 2>/dev/null && ok "backed up /etc/nginx to $f"
+}
+
+step_nginx() {
+    command -v nginx >/dev/null 2>&1 && return 0
+    confirm "nginx is not installed. Install it now with apt (it is not started on port 80)?" \
+        || die "the gateway needs nginx: sudo apt install nginx"
+    say "Installing nginx"
+    local made_policy=0
+    if [ ! -e /usr/sbin/policy-rc.d ]; then
+        # Keeps apt from starting nginx with its default site on :80, where Apache already listens
+        printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d && chmod 755 /usr/sbin/policy-rc.d && made_policy=1
+    fi
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends nginx \
+        || { apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends nginx; }
+    local rc=$?
+    [ "$made_policy" = "1" ] && rm -f /usr/sbin/policy-rc.d
+    [ $rc -eq 0 ] || die "could not install nginx"
+    manifest_set NGINX_INSTALLED_BY_US 1
+    FRESH_NGINX=1
+    ok "nginx $(nginx -v 2>&1 | sed 's/.*nginx\///') installed (not started yet)"
+    if [ -L /etc/nginx/sites-enabled/default ] && [ -n "$(port_owner 80)" ]; then
+        if confirm "nginx's default site listens on port 80, which $(port_owner 80)uses. Disable it (only the symlink is removed)?"; then
+            rm -f /etc/nginx/sites-enabled/default
+            manifest_set DEFAULT_SITE_DISABLED 1
+            ok "disabled nginx's default site (/etc/nginx/sites-available/default is kept)"
+        else
+            warn "left enabled: nginx will fail to start while port 80 is taken"
+        fi
+    fi
+}
+
+step_code() {
+    if [ -d "$APP/backend" ]; then return 0; fi
+    rm -rf "$APP.tmp"
+    if [ -n "$GIT_REPO_URL" ]; then
+        say "Getting the code from $GIT_REPO_URL ($GIT_BRANCH)"
+        if git clone --quiet --branch "$GIT_BRANCH" "$GIT_REPO_URL" "$APP.tmp" 2>/dev/null; then
+            mv "$APP.tmp" "$APP"; ok "code at $(gitapp log -1 --format='%h %s')"
+            secure_code
+            return 0
+        fi
+        rm -rf "$APP.tmp"
+        warn "could not clone $GIT_REPO_URL; using the code shipped in the package (update-code switches to GitHub later)"
+    fi
+    cp -a "$SHARE/src" "$APP"
+    secure_code
+    ok "code copied from the package"
+}
+
+secure_code() {  # root-owned and not writable by the service account: the helper runs from here as root
+    chown -R root:root "$APP"
+    chmod -R go-w "$APP"
+}
+
+step_python() {
+    local want; want=$(sha "$APP/backend/requirements.txt")
+    if [ ! -x "$VENV/bin/python" ]; then
+        say "Creating the Python environment"
+        python3 -m venv "$VENV" || die "python3 -m venv failed (is python3-venv installed?)"
+    fi
+    stamp_ok python "$want" && [ -x "$VENV/bin/uvicorn" ] && return 0
+    say "Installing Python packages"
+    "$VENV/bin/pip" install --disable-pip-version-check -q -r "$APP/backend/requirements.txt" || return 1
+    stamp_set python "$want"
+    ok "Python packages installed"
+}
+
+step_state() {
+    install -d -o "$RUN_USER" -g "$RUN_USER" -m 750 "$DATA" "$DATA/staging"
+    local args=()
+    [ -n "${GATEWAY_PORT:-}" ] && args+=(--gateway-port "$GATEWAY_PORT")
+    [ -n "${ADMIN_PORT:-}" ] && args+=(--admin-port "$ADMIN_PORT")
+    gwm init "${args[@]}" | sed 's/^/  /'
+}
+
+step_apply() {
+    say "Applying the gateway config"
+    gwm config apply | sed 's/^/  /'
+    local rc=${PIPESTATUS[0]}
+    [ "$rc" = "0" ] || return 1
+    if ! systemctl is-active --quiet nginx; then
+        if [ "$FRESH_NGINX" = "1" ] || [ "$(manifest_get NGINX_INSTALLED_BY_US)" = "1" ]; then
+            systemctl enable --quiet nginx; systemctl start nginx || { warn "nginx did not start: journalctl -u nginx"; return 1; }
+            ok "nginx started"
+        elif confirm "nginx is installed but stopped. Start it? (this also starts its other enabled sites)"; then
+            systemctl start nginx || { warn "nginx did not start: journalctl -u nginx"; return 1; }
+            ok "nginx started"
+        else
+            warn "nginx stays stopped; the gateway config is installed and takes effect when nginx starts"
+        fi
+    fi
+    if command -v nginx >/dev/null 2>&1 && ! nginx -T 2>/dev/null | grep -q "^# configuration file $LIVE:"; then
+        warn "your nginx.conf does not include /etc/nginx/conf.d/*.conf, so the gateway is not loaded."
+        warn "Add this line inside http { } in /etc/nginx/nginx.conf, then: sudo nginx-gateway-ctl apply"
+        warn "    include /etc/nginx/conf.d/*.conf;"
+    fi
+    return 0
+}
+
+step_service() {
+    touch "$STATE/setup-complete"
+    systemctl daemon-reload
+    systemctl enable --quiet "$SVC"
+    systemctl restart "$SVC"
+    if wait_healthy 30; then ok "manager is up on 127.0.0.1:$MANAGER_PORT"; else warn "manager not answering yet: nginx-gateway-ctl logs manager"; return 1; fi
+}
+
+print_urls() {
+    local host gp ap
+    gp=$(gwm config ports 2>/dev/null | sed -n 's/^gateway=//p'); gp=${gp:-8280}
+    ap=$(gwm config ports 2>/dev/null | sed -n 's/^admin=//p')
+    echo
+    for host in $(tailscale_hosts); do
+        echo "  Projects   http://$host:$gp/"
+        [ -n "$ap" ] && echo "  Dashboard  http://$host:$ap/"
+    done
+    [ -n "$ap" ] || echo "  Dashboard  only on 127.0.0.1:$MANAGER_PORT (ssh -L $MANAGER_PORT:127.0.0.1:$MANAGER_PORT <server>)"
+    if gwm user list 2>/dev/null | grep -q "default password"; then
+        echo "  Login      a@g.com / 123456  (change it: Settings, or sudo nginx-gateway-ctl passwd)"
+    fi
+    echo
+}
+
+# ── commands ─────────────────────────────────────────────────────────────────
+cmd_setup() {
+    need_root setup
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --yes|-y) YES=1 ;;
+            --gateway-port) GATEWAY_PORT=$2; shift ;;
+            --admin-port) ADMIN_PORT=$2; shift ;;
+            *) die "unknown option: $1" ;;
+        esac; shift
+    done
+    load_conf
+    start_logging setup
+    step_preflight
+    step_baseline
+    step_backup
+    step_nginx
+    mkdir -p "$PREFIX" "$STATE"
+    step_code || die "could not get the code"
+    step_python || die "installing the Python packages failed (log: $LOGDIR/setup.log); run setup again"
+    step_state || die "could not create the gateway state"
+    step_apply || die "the gateway config was not applied (see above); fix it and run setup again"
+    step_service || die "the manager service did not start"
+    say "Nginx Gateway is installed"
+    print_urls
+    python3 -I "$APP/backend/gateway_manager/isolation.py" compare "$STATE/baseline" "$MANAGER_PORT" | sed 's/^/  /' || true
+}
+
+changed_areas() {  # changed_areas OLD NEW -> one line per area touched
+    local files
+    if [ -n "$1" ]; then files=$(gitapp diff --name-only "$1" "$2"); else files=$(gitapp ls-tree -r --name-only "$2"); fi
+    grep -q '^backend/requirements.txt$' <<<"$files" && echo "Python packages (requirements.txt)"
+    grep -q '^backend/' <<<"$files" && echo "manager code -> manager restart"
+    grep -qE '^backend/gateway_manager/(templates/|generator.py|models.py|nginx_helper.py)' <<<"$files" \
+        && echo "nginx config generator -> config re-applied (tested with nginx -t first)"
+    grep -q '^frontend/' <<<"$files" && echo "dashboard pages"
+    grep -q '^packaging/linux/nginx-gateway-ctl$' <<<"$files" && echo "nginx-gateway-ctl itself"
+    grep -qE '^packaging/linux/.*\.(service|template)$|^packaging/linux/(postinst|prerm|postrm|sudoers|.*\.shim)$' <<<"$files" \
+        && echo "package files -> these need a new .deb (python packaging/build_deb.py)"
+    return 0
+}
+
+cmd_update_code() {
+    need_root update-code
+    local check=0 branch=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --check) check=1 ;;
+            --branch) branch=$2; shift ;;
+            *) die "unknown option: $1" ;;
+        esac; shift
+    done
+    load_conf
+    [ -n "$branch" ] || branch=$GIT_BRANCH
+    [ -n "$GIT_REPO_URL" ] || die "no repository set: sudo nginx-gateway-ctl set-repo <url> [branch]"
+    [ -d "$APP/backend" ] || die "not set up yet: sudo nginx-gateway-ctl setup"
+    [ "$check" = "1" ] || start_logging update
+
+    if [ ! -d "$APP/.git" ]; then
+        gitapp init --quiet && gitapp remote add origin "$GIT_REPO_URL"
+    fi
+    gitapp remote set-url origin "$GIT_REPO_URL"
+    say "Fetching $GIT_REPO_URL ($branch)"
+    gitapp fetch --quiet origin "$branch" || die "could not fetch branch '$branch' (private repository? see docs/INSTALL.md)"
+    local old new
+    old=$(gitapp rev-parse -q --verify HEAD 2>/dev/null || true)
+    new=$(gitapp rev-parse FETCH_HEAD)
+
+    if [ "$old" = "$new" ]; then ok "already up to date ($(gitapp log -1 --format='%h %s'))"; return 0; fi
+    if [ "$check" = "1" ]; then
+        if [ -n "$old" ]; then
+            echo "Incoming commits:"; gitapp log --oneline "$old..$new" | sed 's/^/  /'
+        else
+            echo "The current code was copied from the package; updating switches it to $branch at $(gitapp log -1 --format='%h %s' "$new")."
+        fi
+        echo "What would be updated:"; changed_areas "$old" "$new" | sed 's/^/  /'
+        return 0
+    fi
+
+    echo "$old" > "$STATE/previous-commit"
+    echo "What changes:"; changed_areas "$old" "$new" | sed 's/^/  /'
+    gitapp reset --quiet --hard "$new" && gitapp clean -fdq || die "could not update the files"
+    secure_code
+    [ "$branch" != "$GIT_BRANCH" ] && conf_set "$CONF" GIT_BRANCH "$branch"
+    ok "code now at $(gitapp log -1 --format='%h %s')"
+    # Continue with the new version of this script: it may know new steps
+    exec bash "$APP/packaging/linux/nginx-gateway-ctl" _apply-update "$old" "$new"
+}
+
+run_update_steps() {
+    step_python || return 1
+    systemctl restart "$SVC" || return 1
+    wait_healthy 30 || { warn "the manager did not come back"; return 1; }
+    say "Re-applying the gateway config"
+    gwm config apply | sed 's/^/  /'
+    [ "${PIPESTATUS[0]}" = "0" ] || { warn "the new code's nginx config was rejected (nginx kept the old one)"; return 1; }
+}
+
+cmd_apply_update() {  # internal: runs from the updated script after update-code
+    need_root
+    local old=$1 new=$2
+    load_conf
+    if run_update_steps; then
+        say "Updated to $(gitapp log -1 --format='%h %s')"
+        return 0
+    fi
+    if [ -z "$old" ]; then
+        die "the update failed and there is no previous version to go back to (the old code came from the package). Fix the repository and run update-code again."
+    fi
+    say "Rolling back to $(gitapp log -1 --format='%h %s' "$old")"
+    rollback_to "$old" "$new"
+    die "update failed and was rolled back (log: $LOGDIR/update.log)"
+}
+
+rollback_to() {  # rollback_to COMMIT FROM
+    gitapp reset --quiet --hard "$1" && gitapp clean -fdq || die "git reset failed"
+    secure_code
+    echo "$2" > "$STATE/previous-commit"
+    run_update_steps || die "could not restore the previous version; see the log"
+    ok "running $(gitapp log -1 --format='%h %s')"
+}
+
+cmd_rollback() {
+    need_root rollback
+    load_conf
+    [ -d "$APP/.git" ] || die "the code is not a git checkout; nothing to roll back"
+    local prev cur
+    prev=$(cat "$STATE/previous-commit" 2>/dev/null)
+    [ -n "$prev" ] || die "no previous version recorded"
+    cur=$(gitapp rev-parse HEAD)
+    start_logging update
+    say "Rolling back to $(gitapp log -1 --format='%h %s' "$prev")"
+    rollback_to "$prev" "$cur"
+    echo "Run 'sudo nginx-gateway-ctl rollback' again to return to the newer version."
+}
+
+cmd_status() {
+    load_conf
+    echo "${B}Nginx Gateway${N}  package $(dpkg-query -W -f='${Version}' nginx-gateway 2>/dev/null || echo '?')"
+    if [ -d "$APP/.git" ]; then
+        echo "  code      $(gitapp log -1 --format='%h %cd %s' --date=short 2>/dev/null)"
+        local behind
+        behind=$(gitapp rev-list --count HEAD..FETCH_HEAD 2>/dev/null || echo 0)
+        [ "${behind:-0}" -gt 0 ] && echo "            ${Y}$behind newer commit(s) fetched${N}: sudo nginx-gateway-ctl update-code"
+    elif [ -d "$APP" ]; then
+        echo "  code      copied from the package (sudo nginx-gateway-ctl update-code switches to $GIT_REPO_URL)"
+    else
+        echo "  code      not set up: sudo nginx-gateway-ctl setup"
+    fi
+    echo "  repo      ${GIT_REPO_URL:-<not set>} ($GIT_BRANCH)"
+    echo "  manager   $(systemctl is-active "$SVC" 2>/dev/null) on 127.0.0.1:$MANAGER_PORT$(curl -fsS -m 2 "http://127.0.0.1:$MANAGER_PORT/api/health" >/dev/null 2>&1 && echo ", healthy")"
+    echo "  nginx     $(systemctl is-active nginx 2>/dev/null) $(nginx -v 2>&1 | sed 's/.*nginx\///')"
+    if [ -r "$LIVE" ]; then
+        local port ports=""
+        for port in $(grep -oE 'listen [^;]*:[0-9]+;' "$LIVE" | grep -oE '[0-9]+;' | tr -d ';' | sort -un); do
+            if [ -n "$(ss -ltnH "sport = :$port" 2>/dev/null)" ]; then ports="$ports :$port ${G}up${N}"; else ports="$ports :$port ${R}down${N}"; fi
+        done
+        echo "  ports    $ports"
+    fi
+    if [ "$(id -u)" = "0" ] && [ -x "$VENV/bin/python" ]; then
+        echo "  projects"; gwm projects list 2>/dev/null | sed 's/^/    /'
+    fi
+    echo "  host      $(tailscale_hosts)"
+}
+
+cmd_logs() {
+    local what=${1:-manager} follow=""
+    [ "${2:-}" = "-f" ] || [ "${1:-}" = "-f" ] && follow="-f"
+    [ "$what" = "-f" ] && what=manager
+    case "$what" in
+        manager) journalctl -u "$SVC" -n 200 --no-pager $follow ;;
+        nginx)   journalctl -u nginx -n 200 --no-pager $follow ;;
+        access)  tail -n 100 ${follow:+-F} /var/log/nginx/gateway-*.access.log ;;
+        error)   tail -n 100 ${follow:+-F} /var/log/nginx/gateway-*.error.log /var/log/nginx/error.log ;;
+        setup|update) cat "$LOGDIR/$what.log" ;;
+        *) die "usage: nginx-gateway-ctl logs [manager|nginx|access|error|setup|update] [-f]" ;;
+    esac
+}
+
+cmd_service() {  # start|stop|restart
+    need_root "$1"
+    systemctl "$1" "$SVC" && ok "$1: $SVC"
+}
+
+cmd_set_repo() {
+    need_root set-repo
+    [ -n "${1:-}" ] || die "usage: nginx-gateway-ctl set-repo <git url> [branch]"
+    conf_set "$CONF" GIT_REPO_URL "$1"
+    [ -n "${2:-}" ] && conf_set "$CONF" GIT_BRANCH "$2"
+    [ -d "$APP/.git" ] && gitapp remote set-url origin "$1"
+    ok "code source: $1 (${2:-$(conf_get "$CONF" GIT_BRANCH)}). Apply with: sudo nginx-gateway-ctl update-code"
+}
+
+cmd_restart_targets() {
+    need_root restart-targets
+    "${EDITOR:-nano}" "$ETC/restart-targets.conf"
+    ok "saved; the dashboard lists them in the project editor (Advanced -> Restart target)"
+}
+
+cmd_vite_check() {
+    [ -x "$VENV/bin/python" ] || die "not set up yet: sudo nginx-gateway-ctl setup"
+    PYTHONPATH="$APP/backend" "$VENV/bin/python" -m gateway_manager vite-check "$@"
+}
+
+cmd_verify_isolation() {
+    need_root verify-isolation
+    load_conf
+    python3 -I "$(src_dir)/backend/gateway_manager/isolation.py" compare "$STATE/baseline" "$MANAGER_PORT"
+}
+
+cmd_uninstall() {
+    need_root uninstall
+    local how=remove
+    [ "${1:-}" = "--purge" ] && how=purge
+    confirm "Remove the gateway ($how)? nginx itself and its other sites stay." || die "cancelled"
+    apt-get "$how" -y nginx-gateway
+}
+
+cmd_version() {
+    load_conf
+    echo "package  $(dpkg-query -W -f='${Version}' nginx-gateway 2>/dev/null || echo '?')"
+    [ -d "$APP/.git" ] && echo "code     $(gitapp log -1 --format='%h %cd %s' --date=short)"
+    [ -x "$VENV/bin/python" ] && echo "python   $("$VENV/bin/python" --version 2>&1 | awk '{print $2}')"
+    command -v nginx >/dev/null 2>&1 && echo "nginx    $(nginx -v 2>&1 | sed 's/.*nginx\///')"
+}
+
+cmd_run_manager() {  # internal: systemd ExecStart (runs as nginx-gw)
+    load_conf
+    export GWM_STATE_DIR="$DATA" GWM_MANAGER_PORT="$MANAGER_PORT" GWM_FRONTEND_DIR="$APP/frontend" \
+           GWM_SEED_FILE="$APP/examples/seed-projects.json" PYTHONPATH="$APP/backend" PYTHONUNBUFFERED=1
+    cd "$APP/backend" || exit 1
+    exec "$VENV/bin/python" -m uvicorn gateway_manager.main:create_app --factory \
+        --host 127.0.0.1 --port "$MANAGER_PORT" --workers 1 \
+        --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header
+}
+
+usage() {
+    cat <<EOF
+Usage: nginx-gateway-ctl <command>
+
+Setup and updates
+  setup [--yes] [--gateway-port N] [--admin-port N]
+                              install nginx if needed, get the code, start the dashboard
+                              (safe to run again; finished parts are skipped)
+  update-code [--check] [--branch B]
+                              pull the latest code from GitHub, restart the manager and
+                              re-apply the config; rolls back by itself if anything fails
+  rollback                    go back to the code before the last update
+  set-repo <url> [branch]     change where the code comes from
+  uninstall [--purge]         remove the package (nginx and its other sites stay)
+
+Running
+  status                      services, ports, projects and code version
+  start|stop|restart          the manager service
+  logs [manager|nginx|access|error|setup|update] [-f]
+  apply                       re-generate and apply the nginx config from the saved projects
+  smoke-test                  request every enabled project through the gateway port
+  verify-isolation            show that nothing outside the gateway changed since setup
+
+Projects and logins
+  projects list|export|import <file> [--replace]
+  passwd [email]              set a dashboard password (default user a@g.com)
+  user add|remove|list [email]
+  restart-targets             edit which apps the dashboard may restart
+  vite-check <dir> [--prefix /app/]
+                              read-only check of a Vite project for running under a path
+  version
+EOF
+}
+
+main() {
+    local cmd=${1:-help}; [ $# -gt 0 ] && shift
+    case "$cmd" in
+        setup)          cmd_setup "$@" ;;
+        update-code)    cmd_update_code "$@" ;;
+        rollback)       cmd_rollback ;;
+        set-repo)       cmd_set_repo "$@" ;;
+        uninstall)      cmd_uninstall "$@" ;;
+        status)         cmd_status ;;
+        start|stop|restart) cmd_service "$cmd" ;;
+        logs)           cmd_logs "$@" ;;
+        apply)          need_root apply; load_conf; gwm config apply ;;
+        smoke-test)     need_root smoke-test; load_conf; gwm smoke-test "$@" ;;
+        verify-isolation) cmd_verify_isolation ;;
+        projects)       need_root projects; load_conf; gwm projects "$@" ;;
+        passwd)         need_root passwd; load_conf; gwm user passwd "${1:-a@g.com}" ;;
+        user)           need_root user; load_conf; gwm user "$@" ;;
+        restart-targets) cmd_restart_targets ;;
+        vite-check)     cmd_vite_check "$@" ;;
+        version|--version) cmd_version ;;
+        _apply-update)  cmd_apply_update "$@" ;;
+        _run-manager)   cmd_run_manager ;;
+        help|-h|--help) usage ;;
+        *) usage; exit 1 ;;
+    esac
+}
+
+main "$@"

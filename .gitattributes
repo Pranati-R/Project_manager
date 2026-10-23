@@ -1,0 +1,3 @@
+# Everything runs on Linux: keep LF line endings, also when committed from Windows
+* text=auto eol=lf
+*.deb binary

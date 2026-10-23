@@ -1,0 +1,10 @@
+# Apps the gateway dashboard is allowed to restart. Root-owned: the dashboard can only
+# restart what is listed here, so nothing else on the server can be touched through it.
+#
+# One per line:   <id>  systemd  <unit>.service
+#                 <id>  docker   <container name>
+# Then pick the id as "Restart target" in the project's Advanced settings.
+#
+# prajna-frontend      systemd  prajna-frontend.service
+# meeting-transcriber  systemd  meeting-transcriber.service
+# smart-finder         docker   smart-finder

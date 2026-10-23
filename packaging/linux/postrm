@@ -1,0 +1,78 @@
+#!/bin/sh
+# remove: takes the gateway out of nginx (after a backup, keeping nginx's config valid),
+#         and deletes the code, the Python environment and the sudo rule.
+# purge:  also deletes the settings, projects, logins and the nginx-gw account.
+# nginx itself, its other sites and Apache are never touched. Backups stay in
+# /var/backups/nginx-gateway.
+set -e
+
+STUB=/etc/nginx/conf.d/nginx-gateway.conf
+GW_DIR=/etc/nginx/nginx-gateway
+BACKUPS=/var/backups/nginx-gateway
+MANIFEST=/etc/nginx-gateway/install-manifest
+
+manifest_get() { [ -r "$MANIFEST" ] && sed -n "s/^$1=//p" "$MANIFEST" | tail -n 1; }
+
+remove_from_nginx() {
+    [ -e "$STUB" ] || [ -d "$GW_DIR" ] || return 0
+    ts=$(date -u +%Y%m%dT%H%M%SZ)
+    mkdir -p "$BACKUPS"; chmod 700 "$BACKUPS"
+    archive="$BACKUPS/removed-$ts.tar.gz"
+    set --
+    [ -e "$STUB" ] && set -- "$@" "${STUB#/}"
+    [ -d "$GW_DIR" ] && set -- "$@" "${GW_DIR#/}"
+    tar -czf "$archive" -C / "$@" 2>/dev/null || true
+    rm -f "$STUB"
+    rm -rf "$GW_DIR"
+    if command -v nginx >/dev/null 2>&1; then
+        if nginx -t -q 2>/dev/null; then
+            if [ -d /run/systemd/system ] && systemctl is-active --quiet nginx; then
+                systemctl reload nginx || true
+            fi
+            echo "nginx-gateway: removed the gateway from nginx (backup: $archive)"
+        else
+            tar -xzf "$archive" -C / 2>/dev/null || true
+            echo "nginx-gateway: nginx -t fails without the gateway files, so they were put back; check: sudo nginx -t" >&2
+        fi
+    fi
+}
+
+restore_default_site() {
+    [ "$(manifest_get DEFAULT_SITE_DISABLED)" = "1" ] || return 0
+    [ -e /etc/nginx/sites-available/default ] && [ ! -e /etc/nginx/sites-enabled/default ] || return 0
+    if [ -n "$(ss -ltnH 'sport = :80' 2>/dev/null)" ]; then
+        echo "nginx-gateway: nginx's default site was disabled at setup and stays disabled (port 80 is in use)."
+        echo "               Re-enable it later with: sudo ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/"
+    else
+        ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+        if nginx -t -q 2>/dev/null; then
+            systemctl is-active --quiet nginx && systemctl reload nginx || true
+            echo "nginx-gateway: re-enabled nginx's default site"
+        else
+            rm -f /etc/nginx/sites-enabled/default
+        fi
+    fi
+}
+
+case "$1" in
+    remove)
+        remove_from_nginx
+        restore_default_site
+        rm -rf /opt/nginx-gateway /etc/sudoers.d/nginx-gateway
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload >/dev/null 2>&1 || true
+        fi
+        ;;
+    purge)
+        remove_from_nginx
+        rm -rf /opt/nginx-gateway /etc/sudoers.d/nginx-gateway /etc/nginx-gateway /var/lib/nginx-gateway /var/log/nginx-gateway
+        if getent passwd nginx-gw >/dev/null; then
+            deluser --system nginx-gw >/dev/null 2>&1 || true
+        fi
+        if getent group nginx-gw >/dev/null; then
+            delgroup --system nginx-gw >/dev/null 2>&1 || true
+        fi
+        echo "nginx-gateway: purged. Backups of the nginx files are kept in $BACKUPS"
+        ;;
+esac
+exit 0

@@ -1,0 +1,9 @@
+#!/bin/sh
+# /usr/bin/nginx-gateway-ctl: runs the control script from the live code (updated by
+# `nginx-gateway-ctl update-code`), or the copy shipped in the package before setup.
+for ctl in /opt/nginx-gateway/app/packaging/linux/nginx-gateway-ctl \
+           /usr/share/nginx-gateway/src/packaging/linux/nginx-gateway-ctl; do
+    [ -f "$ctl" ] && exec bash "$ctl" "$@"
+done
+echo "nginx-gateway-ctl: control script not found; reinstall the nginx-gateway package" >&2
+exit 1

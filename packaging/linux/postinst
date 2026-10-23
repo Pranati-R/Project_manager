@@ -1,0 +1,48 @@
+#!/bin/sh
+# Quick and offline: creates the service account, folders, config and the sudo rule.
+# nginx, the Python packages and the gateway itself are set up by
+# `sudo nginx-gateway-ctl setup`, which shows what it will change first.
+set -e
+
+ETC=/etc/nginx-gateway
+SHARE=/usr/share/nginx-gateway
+DATA=/var/lib/nginx-gateway
+RUN_USER=nginx-gw
+
+[ "$1" = "configure" ] || exit 0
+
+if ! getent passwd "$RUN_USER" >/dev/null; then
+    adduser --system --group --home "$DATA" --no-create-home --shell /usr/sbin/nologin "$RUN_USER" >/dev/null
+fi
+
+mkdir -p "$ETC" /opt/nginx-gateway/state /var/backups/nginx-gateway
+install -d -o "$RUN_USER" -g "$RUN_USER" -m 750 "$DATA" "$DATA/staging"
+chmod 700 /var/backups/nginx-gateway
+
+# Settings files are never overwritten
+[ -f "$ETC/nginx-gateway.conf" ] || cp "$SHARE/nginx-gateway.conf.template" "$ETC/nginx-gateway.conf"
+[ -f "$ETC/restart-targets.conf" ] || cp "$SHARE/restart-targets.conf.template" "$ETC/restart-targets.conf"
+chown root:root "$ETC/nginx-gateway.conf" "$ETC/restart-targets.conf"
+chmod 644 "$ETC/nginx-gateway.conf" "$ETC/restart-targets.conf"
+
+# The only privilege the dashboard gets: running the gateway helper. Checked before it is
+# installed, because a broken file in /etc/sudoers.d would break sudo for everyone.
+if visudo -cqf "$SHARE/sudoers"; then
+    install -m 0440 -o root -g root "$SHARE/sudoers" /etc/sudoers.d/nginx-gateway
+else
+    echo "nginx-gateway: the sudo rule did not pass visudo -c and was NOT installed" >&2
+fi
+
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload || true
+fi
+
+echo
+if [ -f /opt/nginx-gateway/state/setup-complete ]; then
+    [ -d /run/systemd/system ] && systemctl try-restart nginx-gateway-manager.service || true
+    echo "Nginx Gateway package updated. Get the latest code with: sudo nginx-gateway-ctl update-code"
+else
+    echo "Next step (installs nginx if needed and starts the dashboard):  sudo nginx-gateway-ctl setup"
+fi
+echo
+exit 0

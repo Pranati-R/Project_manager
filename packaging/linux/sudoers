@@ -1,0 +1,5 @@
+# Installed by the nginx-gateway package. The dashboard's service account may run only
+# the gateway helper as root; the helper accepts a fixed set of commands and validates
+# every config before nginx sees it.
+Defaults:nginx-gw !requiretty
+nginx-gw ALL=(root) NOPASSWD: /usr/sbin/nginx-gateway-helper
