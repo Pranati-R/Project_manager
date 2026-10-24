@@ -130,14 +130,14 @@ async def test_project(project: Project, settings: Settings, *, proc_net: Path =
     base = gateway_base(settings, project)
     prefix = project.route_prefix
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
-        url = f"{base}{prefix}/"
+        page = prefix if project.app_owns_bare_prefix else f"{prefix}/"
         try:
-            r = await client.get(url, headers={"Accept": "text/html,*/*"})
+            r = await client.get(f"{base}{page}", headers={"Accept": "text/html,*/*"})
         except httpx.HTTPError as e:
-            checks.append(_check("gateway", f"GET {prefix}/ through the gateway", "error", str(e) or type(e).__name__,
+            checks.append(_check("gateway", f"GET {page} through the gateway", "error", str(e) or type(e).__name__,
                                  "Is nginx running and the config applied? See the Config tab."))
             return _summary(checks)
-        checks.append(_gateway_status_check(r, f"GET {prefix}/ through the gateway"))
+        checks.append(_gateway_status_check(r, f"GET {page} through the gateway"))
         if "text/html" in r.headers.get("content-type", "") and r.status_code < 500:
             checks += await _doctor(client, base, project, r.text)
         if project.backend:

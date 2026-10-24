@@ -37,6 +37,11 @@
     location = {{ p.prefix|tok }} {
         return 301 {{ p.prefix|tok }}/$is_args$args;
     }
+{%- elif p.proxy_bare %}
+    location = {{ p.prefix|tok }} {
+        proxy_pass {{ p.fe_pass|tok }};
+{{- proxy_common(p, p.fe_host_header) }}
+    }
 {%- endif %}
 {%- if p.api %}
     location = {{ p.api.location|tok }} {

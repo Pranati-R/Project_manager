@@ -24,7 +24,37 @@ on their source. The ports are examples: use the ones your apps listen on.
 
 ---
 
-## Prajna: Vite dev server + FastAPI, on a path
+## Prajna: installed `.deb` (built files behind its own nginx) + FastAPI
+
+On the server, `prajna-ctl` serves a pre-built `frontend/dist` from its own nginx site on port 8200,
+at the site root, and that site forwards `/api/` to the backend on 8201. That build was made for `/`,
+so under `/prajna/` it loads `/assets/…` and `/favicon.png` from the gateway root and gets 404s.
+
+**Works now, no rebuild: its own gateway port.**
+- app type **Prebuilt app**
+- Exposure **Its own gateway port** `8283`
+- frontend `127.0.0.1:8200`
+- no separate API server (Prajna's nginx already forwards `/api`)
+- Advanced: **Pass the original Host header** on
+
+Open `http://<server>:8283/`.
+
+**On the path `/prajna`: rebuild once.**
+1. Make the two code edits below.
+2. Build with `VITE_API_BASE=/prajna/api npx vite build --base /prajna/`, then rebuild and reinstall
+   the Prajna `.deb`.
+3. In the dashboard:
+   - app type **Built files from a static server** (path mode `strip`)
+   - path `/prajna`, frontend `127.0.0.1:8200`
+   - separate API server `127.0.0.1:8201`, path `/api`
+
+Such a build only works through the gateway, not at `:8200` directly.
+
+Also change `listen 8200;` in Prajna's `deploy/linux/nginx/prajna.conf` to
+`listen 127.0.0.1:8200;`, and remove the `[::]:8200` line. Otherwise port 8200 stays reachable
+without the gateway.
+
+### Running Prajna from source (Vite dev server)
 
 `sql-llm/frontend` uses Vite 8 and React Router 7. Here is what `vite-check` found:
 
@@ -132,7 +162,7 @@ Then pick `smart-finder` as **Restart target** in the project's Advanced setting
 
 | App | Settings |
 |---|---|
-| Static site or SPA built with `--base /x/`, in Docker (`examples/Dockerfile.vite-subpath.example`) | path `/x`, **Built files from a static server** (mode `strip`), frontend `127.0.0.1:<published port>`; publish with `-p 127.0.0.1:PORT:80` |
+| Static site or SPA built with `--base /x/`, in Docker (`examples/Dockerfile.vite-subpath.example`) | path `/x`, **Built files from a static server** (mode `strip`), frontend `127.0.0.1:<published port>`; publish with `-p 127.0.0.1:PORT:80`. For a Compose stack, see [DOCKER_SUBPATH.md](DOCKER_SUBPATH.md) |
 | App that serves its built frontend itself (FastAPI `StaticFiles`, Express) | **Built files served by the app's own backend** (mode `strip`) |
 | Prebuilt `.deb` app you cannot rebuild | **Prebuilt app** → Exposure *own port*. Or try path mode `rewrite` if it is a simple multi-page site |
 | Exactly one app that must own `/` of the gateway port | path `/`. Other paths still win, and the landing page is replaced |

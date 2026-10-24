@@ -83,6 +83,17 @@ def test_landing_page_and_catch_all():
     assert "location / {\n        proxy_pass http://127.0.0.1:9000;" in text
 
 
+def test_nextjs_bare_prefix_is_forwarded_not_redirected():
+    # Next.js basePath redirects "/x/" to "/x"; redirecting "/x" back to "/x/" would loop
+    p = Project(id="sf", name="SF", prefix="/smartfinder", frontend={"port": 3001}, app_kind="nextjs")
+    text = render(Settings(), [p], manager_port=8790)
+    assert "location = /smartfinder {\n        proxy_pass http://127.0.0.1:3001;" in text
+    assert "return 301 /smartfinder/" not in text
+    assert nginx_helper.lint(text) == []
+    vite = Project(id="v", name="V", prefix="/v", frontend={"port": 8200}, app_kind="vite_dev")
+    assert "return 301 /v/$is_args$args;" in render(Settings(), [vite], manager_port=8790)
+
+
 def test_ipv6_listen_and_upstream():
     settings = Settings(listen_addresses=["0.0.0.0", "::"])
     p = Project(id="v6", name="V6", prefix="/v6", frontend={"host": "::1", "port": 8200})

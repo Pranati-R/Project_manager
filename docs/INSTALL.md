@@ -7,7 +7,7 @@ The target is Ubuntu 22.04 or 24.04 with systemd. Python 3.10+ ships with both.
 The installed system pulls its code from a git repository, the same way Smart Finder does.
 
 ```bash
-git remote add origin https://github.com/Vcode7/nginx-gateway.git
+git remote add origin https://github.com/Pranati-R/Project_manager.git
 git push -u origin main
 ```
 
@@ -19,9 +19,9 @@ after installing.
 
 - **Deploy key:** a read-only deploy key on the repository, with the key in
   `/root/.ssh/id_ed25519`. Then run
-  `sudo nginx-gateway-ctl set-repo git@github.com:Vcode7/nginx-gateway.git`.
+  `sudo nginx-gateway-ctl set-repo git@github.com:Pranati-R/Project_manager.git`.
 - **HTTPS token:** a fine-grained token with read access to that one repository:
-  `sudo nginx-gateway-ctl set-repo https://<token>@github.com/Vcode7/nginx-gateway.git`.
+  `sudo nginx-gateway-ctl set-repo https://<token>@github.com/Pranati-R/Project_manager.git`.
   The token is stored in `/etc/nginx-gateway/nginx-gateway.conf`, which is mode 644, so prefer the
   deploy key on shared servers.
 
@@ -74,7 +74,7 @@ default site on port 80, collide with Apache and fail.
    `backend/requirements.txt`.
 7. **Creates the state.** `/var/lib/nginx-gateway/state.json` gets an example *Prajna* project
    (8200/8201) and `users.json` gets the default login **a@g.com / 123456**. Use
-   `--gateway-port`/`--admin-port` to start on other ports.
+   `--gateway-port`/`--admin-port`/`--manager-port` to start on other ports (setup suggests a free one when a port is taken).
 8. **Applies the config.** It writes `/etc/nginx/nginx-gateway/gateway.conf` and the one-line
    `/etc/nginx/conf.d/nginx-gateway.conf`, runs `nginx -t`, then reloads nginx. A freshly installed
    nginx is started. An existing nginx that was stopped is only started after you confirm, because

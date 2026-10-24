@@ -226,6 +226,13 @@ class Project(BaseModel):
         """The prefix used to build locations: "" when served at the root."""
         return "" if self.is_root else (self.prefix or "")
 
+    @property
+    def app_owns_bare_prefix(self) -> bool:
+        """Next.js with basePath answers "/x" itself and redirects "/x/" to "/x", so the gateway
+        must forward "/x" instead of redirecting it to "/x/" (that would loop)."""
+        return (bool(self.route_prefix) and self.app_kind == AppKind.nextjs
+                and self.frontend.path_mode == PathMode.subpath)
+
 
 class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid")

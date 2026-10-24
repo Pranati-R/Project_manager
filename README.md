@@ -90,7 +90,7 @@ only need a new `.deb` when files that dpkg installs change: the systemd unit, t
 rule or the maintainer scripts. `update-code --check` tells you when that is the case.
 
 The repository URL is set in `/etc/nginx-gateway/nginx-gateway.conf`
-(`https://github.com/Vcode7/nginx-gateway.git` by default). Change it with:
+(`https://github.com/Pranati-R/Project_manager.git` by default). Change it with:
 
 ```bash
 sudo nginx-gateway-ctl set-repo https://github.com/<you>/<repo>.git main
@@ -186,5 +186,6 @@ GW_NGINX_BIN=/tmp/ngx/usr/sbin/nginx pytest
 - [docs/INSTALL.md](docs/INSTALL.md): install, update, uninstall, files and firewall
 - [docs/ADDING_PROJECTS.md](docs/ADDING_PROJECTS.md): worked examples and the JSON/API formats
 - [docs/VITE_BASE_PATH.md](docs/VITE_BASE_PATH.md): why subpaths break and how to fix them
+- [docs/DOCKER_SUBPATH.md](docs/DOCKER_SUBPATH.md): which files to change for a Docker Compose app (Vite or Next.js), with OccuSafe as the example
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 - [docs/SECURITY.md](docs/SECURITY.md): privilege separation, auth and isolation

@@ -64,6 +64,15 @@ port_owner() {  # port_owner PORT -> program names listening on it (empty when f
     ss -ltnpH "sport = :$1" 2>/dev/null | grep -o '(("[^"]*"' | tr -d '("' | sort -u | tr '\n' ' '
 }
 
+free_port_after() {  # free_port_after PORT -> the next port above it nobody listens on
+    local p=$(( $1 + 1 ))
+    while [ $p -lt $(( $1 + 200 )) ]; do
+        [ -z "$(ss -ltnH "sport = :$p" 2>/dev/null)" ] && { echo "$p"; return; }
+        p=$(( p + 1 ))
+    done
+    echo "<a free port>"
+}
+
 confirm() {  # confirm QUESTION -> 0 for yes (always yes with --yes)
     [ "$YES" = "1" ] && return 0
     if [ ! -t 0 ]; then die "$1 (not answered: run interactively, or add --yes)"; fi
@@ -135,11 +144,12 @@ step_preflight() {
         ok "nginx is not installed: setup installs it without starting it on port 80"
     fi
 
-    local gp=${GATEWAY_PORT:-8280} ap=${ADMIN_PORT:-8281} port owner
+    local gp=${GATEWAY_PORT:-8280} ap=${ADMIN_PORT:-8281} port owner flag
     if [ ! -f "$STATE/setup-complete" ]; then
-        for port in "$gp" "$ap" "$MANAGER_PORT"; do
+        for flag in "--gateway-port $gp" "--admin-port $ap" "--manager-port $MANAGER_PORT"; do
+            port=${flag##* }
             owner=$(port_owner "$port")
-            [ -z "$owner" ] || die "port $port is already used by: $owner- choose others with --gateway-port / --admin-port, or MANAGER_PORT in $CONF"
+            [ -z "$owner" ] || die "port $port is already used by: $owner- run setup again with ${flag% *} $(free_port_after "$port")"
         done
         ok "ports $gp (gateway), $ap (dashboard) and 127.0.0.1:$MANAGER_PORT (manager) are free"
     fi
@@ -298,9 +308,15 @@ cmd_setup() {
             --yes|-y) YES=1 ;;
             --gateway-port) GATEWAY_PORT=$2; shift ;;
             --admin-port) ADMIN_PORT=$2; shift ;;
+            --manager-port) MANAGER_PORT_ARG=$2; shift ;;
             *) die "unknown option: $1" ;;
         esac; shift
     done
+    if [ -n "${MANAGER_PORT_ARG:-}" ]; then
+        [[ "$MANAGER_PORT_ARG" =~ ^[0-9]+$ ]] && [ "$MANAGER_PORT_ARG" -ge 1024 ] && [ "$MANAGER_PORT_ARG" -le 65535 ] \
+            || die "--manager-port needs a port between 1024 and 65535"
+        conf_set "$CONF" MANAGER_PORT "$MANAGER_PORT_ARG"
+    fi
     load_conf
     start_logging setup
     step_preflight
@@ -531,7 +547,7 @@ usage() {
 Usage: nginx-gateway-ctl <command>
 
 Setup and updates
-  setup [--yes] [--gateway-port N] [--admin-port N]
+  setup [--yes] [--gateway-port N] [--admin-port N] [--manager-port N]
                               install nginx if needed, get the code, start the dashboard
                               (safe to run again; finished parts are skipped)
   update-code [--check] [--branch B]

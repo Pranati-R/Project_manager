@@ -3,13 +3,13 @@
     {
       "id": "prajna",
       "name": "Prajna",
-      "prefix": "/prajna",
+      "exposure": "port",
+      "dedicated_port": 8283,
       "frontend": { "host": "127.0.0.1", "port": 8200, "path_mode": "subpath" },
-      "backend": { "host": "127.0.0.1", "port": 8201, "api_path": "/api", "api_mode": "strip_prefix", "buffering": false },
-      "app_kind": "vite_dev",
-      "pass_host_header": false,
-      "runtime": "other",
-      "notes": "Example created at setup. Edit it to match how Prajna runs, or delete it."
+      "app_kind": "prebuilt",
+      "pass_host_header": true,
+      "runtime": "systemd",
+      "notes": "Example created at setup: the installed Prajna (.deb) serves a build made for /, so it gets its own gateway port. To move it to /prajna, rebuild with --base /prajna/ (see docs/ADDING_PROJECTS.md)."
     }
   ]
 }

@@ -60,6 +60,7 @@ weren't changed.
 | Symptom | Fix |
 |---|---|
 | `apt install nginx` failed earlier with "bind() to 0.0.0.0:80 failed" | Apache owns :80 and nginx's default site wants it. `sudo rm /etc/nginx/sites-enabled/default && sudo dpkg --configure -a`; `nginx-gateway-ctl setup` avoids this by itself |
+| Setup stops with "port 8790 is already used by: python3" (or 8280/8281) | Another program has that port. Run setup again with the option it names, e.g. `sudo nginx-gateway-ctl setup --manager-port 8791`; nothing was changed |
 | Setup warns "your nginx.conf does not include /etc/nginx/conf.d/*.conf" | Your nginx.conf is custom. Add `include /etc/nginx/conf.d/*.conf;` inside `http { }`, then `sudo nginx-gateway-ctl apply` |
 | `update-code` "could not fetch" | Private repository; see INSTALL.md (deploy key or token) |
 | `update-code` rolled back | The new code failed a step; the reason is in `/var/log/nginx-gateway/update.log`. Fix it, push, run again |
