@@ -1,35 +1,35 @@
 {
-  "_comment": "Import with: sudo nginx-gateway-ctl projects import /path/to/this.json  (or Settings > Import in the dashboard). Ports are examples: use the ones your apps listen on.",
+  "_comment": "Import with: sudo nginx-gateway-ctl projects import /path/to/this.json  (or Settings > Import in the dashboard). Names and ports are examples: use your own.",
   "projects": [
     {
-      "id": "prajna",
-      "name": "Prajna",
-      "prefix": "/prajna",
-      "frontend": { "host": "127.0.0.1", "port": 8200, "path_mode": "subpath" },
-      "backend": { "host": "127.0.0.1", "port": 8201, "api_path": "/api", "api_mode": "strip_prefix" },
+      "id": "vite-with-api",
+      "name": "Vite app with an API",
+      "prefix": "/vite-with-api",
+      "frontend": { "host": "127.0.0.1", "port": 5173, "path_mode": "subpath" },
+      "backend": { "host": "127.0.0.1", "port": 8000, "api_path": "/api", "api_mode": "strip_prefix" },
       "app_kind": "vite_dev",
       "pass_host_header": false,
       "runtime": "tmux",
-      "app_dir": "/home/me/sql-llm/frontend",
-      "notes": "Start with: VITE_API_BASE=/prajna/api npm run dev -- --base /prajna/ --host 127.0.0.1 --port 8200 --strictPort"
+      "app_dir": "/home/me/vite-with-api/frontend",
+      "notes": "Start with: VITE_API_BASE=/vite-with-api/api npm run dev -- --base /vite-with-api/ --host 127.0.0.1 --port 5173 --strictPort. The backend needs no change."
     },
     {
-      "id": "meeting-transcriber",
-      "name": "Meeting Transcriber",
-      "prefix": "/meeting-transcriber",
-      "frontend": { "host": "127.0.0.1", "port": 8300, "path_mode": "subpath" },
-      "backend": { "host": "127.0.0.1", "port": 8301, "api_path": "/backend", "api_mode": "strip_all" },
+      "id": "many-routes-api",
+      "name": "App with many backend routes",
+      "prefix": "/many-routes-api",
+      "frontend": { "host": "127.0.0.1", "port": 5174, "path_mode": "subpath" },
+      "backend": { "host": "127.0.0.1", "port": 8001, "api_path": "/backend", "api_mode": "strip_all" },
       "app_kind": "vite_dev",
       "pass_host_header": false,
       "runtime": "systemd",
       "read_timeout": 7200,
       "max_body_size": "500m",
       "health_path": "/health",
-      "notes": "The backend has many top-level routes (/auth, /voice, ...), so they live under /meeting-transcriber/backend/ with strip_all. Build/start the frontend with VITE_API_BASE_URL=/meeting-transcriber/backend."
+      "notes": "The backend has many top-level routes (/login, /users, ...), so they live under /many-routes-api/backend/ with strip_all. Start the frontend with VITE_API_BASE_URL=/many-routes-api/backend. The backend needs no change."
     },
     {
-      "id": "smart-finder",
-      "name": "Smart Finder",
+      "id": "next-own-port",
+      "name": "Next.js app on its own port",
       "exposure": "port",
       "dedicated_port": 8282,
       "frontend": { "host": "127.0.0.1", "port": 3000, "path_mode": "subpath" },
@@ -37,7 +37,7 @@
       "runtime": "systemd",
       "read_timeout": 7200,
       "max_body_size": "100m",
-      "notes": "Next.js app with many fetch('/api/...') calls: its own gateway port needs no code change. Set FRONTEND_HOST=127.0.0.1 in /etc/smartfinder/smartfinder.conf so only the gateway reaches it."
+      "notes": "Next.js app with many fetch('/api/...') calls: its own gateway port needs no code change. Make the app listen on 127.0.0.1 so only the gateway reaches it."
     }
   ]
 }

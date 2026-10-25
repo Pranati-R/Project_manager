@@ -1,10 +1,10 @@
 // A Vite config that works both at the site root and under a gateway path.
 //
 //   npm run dev                                         -> http://localhost:5173/
-//   VITE_BASE_PATH=/prajna/ npm run dev -- --host 127.0.0.1 --port 8200 --strictPort
-//                                                       -> http://<tailscale-ip>:8280/prajna/
+//   VITE_BASE_PATH=/myapp/ npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
+//                                                       -> http://<tailscale-ip>:8280/myapp/
 //
-// You can also skip this file change entirely and pass --base /prajna/ on the command line.
+// You can also skip this file change entirely and pass --base /myapp/ on the command line.
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 

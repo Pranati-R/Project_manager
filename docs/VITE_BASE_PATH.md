@@ -1,72 +1,69 @@
-# Vite (and other SPAs) under a gateway path
+# Why apps break under a path, and the fix
+
+Short version: **tell the frontend its base path** (for Vite: `--base /myapp/`). The step-by-step
+version is in [GUIDE.md](GUIDE.md). This page explains *why*.
 
 ## Why it breaks
 
-Vite assumes the app lives at `/` (`base: '/'`) and writes root-absolute URLs into the build:
+Vite assumes the app lives at `/`. It writes links that start with `/` into the page:
 
 ```html
-<script type="module" src="/assets/index-4f2a.js"></script>   <!-- index.html -->
+<script type="module" src="/assets/index-4f2a.js"></script>
 ```
 
-The same root-absolute URLs appear in several other places:
-- CSS `url(/assets/…)`
-- the JS module-preload helper
-- in dev mode: `/@vite/client`, `/src/main.tsx` and `/node_modules/.vite/deps/…`
+Open the app at `http://server:8280/myapp/` and the browser asks for `/assets/index-4f2a.js`. That
+is outside `/myapp/`, so the gateway has no route for it and the page stays blank.
 
-Open the app at `http://server:8280/prajna/` and the browser asks for `/assets/index-4f2a.js`,
-which is outside `/prajna/`, so no route matches. Two more things break:
-- **React Router** without a `basename` sees the path `/prajna/settings` and shows its "not found"
-  route.
-- **Code like `fetch('/api/items')`** calls the gateway root instead of the project's API.
+Two more things break the same way:
+- **A router** without a `basename` sees the URL `/myapp/settings` and says "page not found".
+- **Code like `fetch('/api/items')`** calls the gateway root instead of your project.
 
-## Can nginx rewrite this instead?
+## Why the gateway does not just rewrite the links
 
-**Only for simple sites, so it is not the default.** We tried each option:
+We tried. It only works for very simple sites, so it is not the default.
 
-| Option | Result |
+| Idea | Why it fails |
 |---|---|
-| `sub_filter` on HTML/CSS/JS (`="/` → `="/prajna/`) | Fixes literal strings in responses. It cannot fix URLs the code *builds* at runtime (`fetch(base + '/x')`, the router, `new URL('/x', location)`), or minified chunks that join strings. It also needs uncompressed upstream responses and touches any text that happens to look like a URL. |
-| Routing unprefixed requests by `Referer` or a cookie | Vite dev loads modules from modules, so their `Referer` is `/src/...`, not `/prajna/`. WebSocket handshakes carry no `Referer`. A cookie is shared by every tab, so two apps open at once fight over it. |
-| Vite `base: './'` (relative) | Works for a production build that stays on one URL or uses a hash router. Deep links of a history-routed SPA (`/prajna/a/b`) resolve `./assets` to `/prajna/a/assets`. The dev server ignores it. |
+| Rewrite `="/` to `="/myapp/` in responses | Cannot fix URLs the code builds while running (`fetch(base + '/x')`, routers), or minified code. It can also change text that only looks like a URL. |
+| Guess the project from the `Referer` or a cookie | Vite dev loads modules from modules, so the `Referer` is not the project path. WebSocket handshakes send none. A cookie is shared by all tabs, so two apps fight. |
+| Vite `base: './'` (relative links) | Fine for a hash router. Breaks on deep links such as `/myapp/a/b`, and the dev server ignores it. |
 
-That is why the gateway only offers rewriting as an opt-in, best-effort **`rewrite`** path mode, for
-simple multi-page sites you cannot rebuild. The end-to-end test verifies that it rewrites `href`,
-`src`, `url()` and `"/assets/` while leaving protocol-relative `//cdn…` URLs alone.
+So the gateway offers rewriting only as an optional, best-effort path mode called **`rewrite`**, for
+simple multi-page sites you cannot rebuild.
 
-## The working approach: tell the app its base path
+## The fix: tell the app where it lives
 
-Vite accepts `--base` on the command line for `dev`, `build` and `preview`. That moves the assets,
-the dev client and the hot-reload socket under the prefix, **without editing `vite.config`**. The
-gateway then forwards the path to match the way the app is served. The dashboard's **App type**
-choice sets this for you:
+Vite accepts `--base` for `dev`, `build` and `preview`. It moves the assets, the dev client and hot
+reload under the path, **without editing `vite.config`**. The gateway then forwards requests the way
+the app is served. Picking the **App type** in the dashboard sets this for you.
 
-| How the app is served | Start / build it with | Gateway path mode | Host header to the app |
+| How the app is served | Start / build it with | Gateway path mode | Host header |
 |---|---|---|---|
-| `vite` dev server | `npm run dev -- --base /prajna/ --host 127.0.0.1 --port 8200 --strictPort` | `subpath`: forwards `/prajna/...` unchanged | `127.0.0.1:8200` |
-| `vite preview` | `vite build --base /prajna/` then `vite preview --base /prajna/ --host 127.0.0.1 --port 8200` | `subpath` | `127.0.0.1:8200` |
-| static files (Docker nginx, `serve -s`, Caddy) | `vite build --base /prajna/` | `strip`: forwards `/...` | original |
-| files served by the app's own backend | `vite build --base /prajna/` | `strip` | original |
-| Next.js | `basePath` in `next.config` + rebuild | `subpath` | original |
-| prebuilt, cannot rebuild | (nothing) | its **own port** (served at `/`) | original |
+| `vite` dev server | `npm run dev -- --base /myapp/ --host 127.0.0.1 --port 5173 --strictPort` | `subpath`: `/myapp/...` is forwarded unchanged | `127.0.0.1:5173` |
+| `vite preview` | `vite build --base /myapp/`, then `vite preview --base /myapp/ --host 127.0.0.1 --port 4173` | `subpath` | `127.0.0.1:4173` |
+| Static files (Docker nginx, `serve -s`, Caddy) | `vite build --base /myapp/` | `strip`: `/myapp` is removed | original |
+| Files served by your own backend | `vite build --base /myapp/` | `strip` | original |
+| Next.js | `basePath` in `next.config`, rebuild | `subpath` | original |
+| Cannot rebuild | nothing | its **own port** (served at `/`) | original |
 
-**Why "Host 127.0.0.1:8200" for Vite.** Since Vite 6.0.9 (and 5.4.12), the dev and preview servers
-reject requests whose `Host` is not localhost or an IP address. You would see "Blocked request.
-This host is not allowed" when you browse by MagicDNS name. With the original Host header turned off
-(the Vite preset does this), the gateway sends `Host: 127.0.0.1:<port>`, and Vite accepts it without
-an `allowedHosts` change.
+**What do `subpath` and `strip` mean?**
+- `subpath`: the gateway sends `/myapp/page` to the app as `/myapp/page`. The app knows its path.
+- `strip`: the gateway sends `/myapp/page` to the app as `/page`. The app thinks it is at `/`.
 
-**Hot reload.** The Vite client opens its WebSocket at the page's own host and port plus the base
-(`ws://server:8280/prajna/`), so it goes through the gateway. Every route forwards WebSocket
-upgrades. Don't set `server.hmr.port`. If the browser console shows WebSocket errors anyway, add
-`server.hmr.clientPort: 8280`. The end-to-end test runs a real Vite dev server under `/viteapp/` and
-connects its HMR socket through the gateway.
+**Why Vite gets "Host 127.0.0.1:5173".** Since Vite 6.0.9 (and 5.4.12), the dev and preview servers
+refuse requests whose `Host` is not localhost or an IP address. You would see "Blocked request. This
+host is not allowed". With **Pass the original Host header** turned off (the Vite types do this
+for you), the gateway sends an IP and Vite accepts it. No `allowedHosts` change needed.
 
-### App changes, only where needed
+**Hot reload.** The Vite client opens its WebSocket on the page's own address plus the base
+(`ws://server:8280/myapp/`), so it goes through the gateway. Don't set `server.hmr.port`. If the
+browser console still shows WebSocket errors, add `server.hmr.clientPort: 8280`.
 
-Each is one line. Because `import.meta.env.BASE_URL` is `/` without the gateway, the same code still
-works at the root and in local development.
+## Small code changes, only where needed
 
-1. **Client-side routing with history URLs:**
+`import.meta.env.BASE_URL` is just `/` without the gateway, so the same code works in both places.
+
+1. **A router with real URLs:**
 
    ```tsx
    <BrowserRouter basename={import.meta.env.BASE_URL}>
@@ -76,51 +73,45 @@ works at the root and in local development.
 
    A hash router (`<HashRouter>`, `createWebHashHistory()`) needs no change.
 
-2. **API calls written as `/api/...`:**
-   - If the app already reads its API address from an env var (`VITE_API_BASE`, `VITE_API_BASE_URL`,
-     …), set that var instead: `VITE_API_BASE=/prajna/api`. No code change.
-   - Otherwise:
+2. **API calls written as `/api/...`.** If the app reads its API address from a variable
+   (`VITE_API_BASE`, ...), set the variable to `/myapp/api`. No code change. Otherwise:
 
-     ```ts
-     const API = import.meta.env.VITE_API_BASE || `${import.meta.env.BASE_URL}api`
-     ```
+   ```ts
+   const API = import.meta.env.VITE_API_BASE || `${import.meta.env.BASE_URL}api`
+   ```
 
-   The gateway sends `/prajna/api/x` to the backend as `/api/x` (API mode `strip_prefix`), so the
-   backend does not change.
+3. **Files from `public/` used in code** (`'/logo.png'`):
+   `` `${import.meta.env.BASE_URL}logo.png` ``. Links in `index.html` and CSS are fixed by Vite.
 
-3. **Files from `public/` referenced in code** (`'/logo.png'`): use
-   `` `${import.meta.env.BASE_URL}logo.png` ``. References in `index.html` and CSS are rewritten by
-   Vite automatically.
-
-4. **Optional:** keep the base in `vite.config` instead of on the command line:
+4. **Optional:** put the base in `vite.config` instead of the command line:
    `base: process.env.VITE_BASE_PATH ?? '/'`. See `examples/vite.config.example.ts`.
 
-**Absolute API URLs** like `http://127.0.0.1:8000` work only on the server itself. A browser on
-another device would call its *own* port 8000. Use a path on the gateway instead.
+**Full URLs like `http://127.0.0.1:8000`** only work on the server itself. A browser on another
+device would call *its own* port 8000. Use a path on the gateway instead.
 
-### Rebuild and restart
+## Restart or rebuild
 
-| Runtime | What to do |
+| How it runs | What to do |
 |---|---|
-| systemd | Put the variables in the unit (`sudo systemctl edit <unit>` → `[Service] Environment=VITE_BASE_PATH=/prajna/`), then `sudo systemctl restart <unit>`. Add the unit to `/etc/nginx-gateway/restart-targets.conf` to get a Restart button in the dashboard. |
-| Docker | The base is baked in at build time. See `examples/Dockerfile.vite-subpath.example`: `docker build --build-arg VITE_BASE_PATH=/app/ …` and `docker run -p 127.0.0.1:8300:80 …`. |
+| systemd | Put the variables in the service (`sudo systemctl edit <service>`, then `[Service]` `Environment=VITE_BASE_PATH=/myapp/`), then `sudo systemctl restart <service>`. |
+| Docker | The base is saved at build time. Use `docker build --build-arg VITE_BASE_PATH=/myapp/ ...` (see `examples/Dockerfile.vite-subpath.example`). |
 | tmux | Stop the old process (Ctrl-C) and start it again with the command from the project's **Guide**. |
 
-### Checking
+## Checking
 
-- **Before:** `nginx-gateway-ctl vite-check <folder> --prefix /prajna/` reads the project and lists
-  what will break. This covers base, router, root-absolute fetches, public files, API env vars,
-  exposed dev-server hosts and HMR settings. It prints the commands; it never writes anything.
-- **After:** use **Test** in the dashboard. It loads the page through the gateway and fails with the
-  exact file when the page still points outside the prefix.
+- **Before:** `nginx-gateway-ctl vite-check <folder> --prefix /myapp/` reads your project and lists
+  what will break. It never changes anything.
+- **After:** press **Test** in the dashboard. If the page still points outside the path, it names
+  the exact file.
 
-## Backends behind a prefix
+## Backends behind a path
 
-- **One API root (`/api/...`):** API path `/api`, mode `strip_prefix`, so the backend sees `/api/x`.
-- **Many top-level routes** (`/auth`, `/voice`, `/history`, …): give them one path, such as
-  `/backend` in mode `strip_all`, so the backend sees `/auth/...`. Then point the app's API base at
-  `/<project>/backend`.
-- **FastAPI's `/docs`** behind the gateway needs `root_path` (`FastAPI(root_path="/prajna")`) so the
-  OpenAPI URL is right. Routing works without it.
-- **Streaming (SSE, token streams)** works because API routes have buffering off by default. Timeouts
-  default to an hour per request. Raise **Timeout** for longer jobs.
+**Your backend never needs a change.** The gateway removes the path first.
+
+- **All routes under `/api`:** API path `/api`, mode `strip_prefix` (the backend sees `/api/x`).
+- **Many top-level routes** (`/login`, `/users`, ...): give them one path such as `/backend`, mode
+  `strip_all` (the backend sees `/login`). Point the frontend's API address at `/myapp/backend`.
+- **FastAPI's `/docs` page** needs `FastAPI(root_path="/myapp")` to find its OpenAPI file. Normal
+  routes work without it.
+- **Streaming (SSE, token streams)** works because buffering is off for API routes. The default
+  timeout is an hour per request. Raise **Timeout** for longer jobs.

@@ -1,9 +1,9 @@
 // API calls that follow the app's base path.
 //
 // Without the gateway:  BASE_URL = "/"         -> /api/items         (Vite dev proxy or same server)
-// Behind the gateway:   BASE_URL = "/prajna/"  -> /prajna/api/items  -> nginx -> backend /api/items
+// Behind the gateway:   BASE_URL = "/myapp/"  -> /myapp/api/items  -> nginx -> backend /api/items
 //
-// VITE_API_BASE still wins when set, e.g. VITE_API_BASE=/prajna/api.
+// VITE_API_BASE still wins when set, e.g. VITE_API_BASE=/myapp/api.
 export const API_BASE: string =
   (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/+$/, '') ||
   `${import.meta.env.BASE_URL}api`

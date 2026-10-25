@@ -38,8 +38,8 @@ export function openEditor(project, app, onSaved) {
     obj[last] = value;
   };
 
-  const name = input('name', { placeholder: 'Prajna', maxlength: 60, autocomplete: 'off' });
-  const id = input('id', { placeholder: 'prajna', maxlength: 40, disabled: editing, autocomplete: 'off' });
+  const name = input('name', { placeholder: 'My App', maxlength: 60, autocomplete: 'off' });
+  const id = input('id', { placeholder: 'my-app', maxlength: 40, disabled: editing, autocomplete: 'off' });
   id.addEventListener('input', () => { idTouched = true; });
   name.addEventListener('input', () => {
     if (!idTouched) { f.id = slug(name.value); id.value = f.id; }
@@ -64,7 +64,7 @@ export function openEditor(project, app, onSaved) {
 
   // exposure
   let prefixTouched = editing;
-  const prefix = input('prefix', { placeholder: '/prajna', maxlength: 120, autocomplete: 'off' });
+  const prefix = input('prefix', { placeholder: '/my-app', maxlength: 120, autocomplete: 'off' });
   prefix.addEventListener('input', () => { prefixTouched = true; });
   prefix.addEventListener('blur', () => {
     let v = prefix.value.trim();
@@ -77,7 +77,7 @@ export function openEditor(project, app, onSaved) {
     h('input', { type: 'radio', name: 'exposure', value, checked: f.exposure === value,
       onchange: () => { f.exposure = value; syncExposure(); changed('exposure'); } }),
     h('div', {}, h('div', { class: 'label', text: title }), h('div', { class: 'help faint', text: help })));
-  const prefixField = field('URL path', prefix, { id: 'prefix', help: `Reached at http://<gateway>:${gwPort}/prajna/. Use / for one app that must own the site root.` });
+  const prefixField = field('URL path', prefix, { id: 'prefix', help: `Reached at http://<gateway>:${gwPort}/my-app/. Use / for one app that must own the site root.` });
   const portField = field('Gateway port for this app', dport, { id: 'dedicated_port', help: 'An unused port; nginx serves the app at / there (Tailscale-only, like the main port).' });
   const syncExposure = () => {
     prefixField.classList.toggle('hidden', f.exposure !== 'path');
@@ -135,7 +135,7 @@ export function openEditor(project, app, onSaved) {
     field('App type', kind, { id: 'app_kind' }), kindHelp,
     h('div', { class: 'section-title', text: 'Where on the gateway' }),
     h('div', { class: 'radio-cards' },
-      radio('path', `A URL path on port ${gwPort}`, 'e.g. /prajna/ (recommended)'),
+      radio('path', `A URL path on port ${gwPort}`, 'e.g. /my-app/ (recommended)'),
       radio('port', 'Its own gateway port', 'for apps that only work at /')),
     prefixField, portField,
     h('div', { class: 'section-title', text: 'The app (upstream)' }),
@@ -157,7 +157,7 @@ export function openEditor(project, app, onSaved) {
         h('div', { class: 'grid two' },
           field('Runs as', runtime, { id: 'runtime', help: 'only used for the setup guide' }),
           field('Restart target', restartSel, { id: 'restart_target', help: `from ${meta.restart_targets_file}` })),
-        field('App folder', input('app_dir', { placeholder: '/home/me/prajna' }), { id: 'app_dir', help: 'only used in the guide commands' }),
+        field('App folder', input('app_dir', { placeholder: '/home/me/my-app' }), { id: 'app_dir', help: 'only used in the guide commands' }),
         field('Notes', notes, { id: 'notes' }),
         h('label', { class: 'check' }, enabled, h('span', { text: 'Enabled' })))));
   drawBackend();

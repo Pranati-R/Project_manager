@@ -5,8 +5,8 @@ One nginx port in front of all your web apps, with a dashboard to manage the rou
 ```
 browser on your tailnet
    │
-   ├─ http://server:8280/prajna/               ─┐
-   ├─ http://server:8280/meeting-transcriber/   ├─ nginx "gateway" server ─► 127.0.0.1:8200, :8201, :8300 …
+   ├─ http://server:8280/shop/                 ─┐
+   ├─ http://server:8280/blog/                  ├─ nginx "gateway" server ─► 127.0.0.1:5173, :8000, :3000 …
    ├─ http://server:8282/  (app that needs /)  ─┘
    └─ http://server:8281/  dashboard ─► nginx ─► 127.0.0.1:8790 manager (FastAPI, user nginx-gw)
                                                      │ sudo, one fixed helper
@@ -75,7 +75,7 @@ At the end it prints the addresses:
 
 ## Updating: push to GitHub, then run one command
 
-The package works like Smart Finder's. The live code is a git checkout in `/opt/nginx-gateway/app`:
+The live code is a git checkout in `/opt/nginx-gateway/app`:
 
 ```bash
 git push                                   # from your machine
@@ -98,8 +98,8 @@ sudo nginx-gateway-ctl set-repo https://github.com/<you>/<repo>.git main
 
 ## Using it
 
-- **Projects.** Each row shows whether the app is up and its route (`/prajna → 127.0.0.1:8200`, API
-  `/prajna/api → :8201`), with an on/off switch and these buttons:
+- **Projects.** Each row shows whether the app is up and its route (`/shop → 127.0.0.1:5173`, API
+  `/shop/api → :8000`), with an on/off switch and these buttons:
   - **Test** checks the app directly, then through the gateway. It also loads the page's files
     through the gateway to catch base-path problems.
   - **Guide** shows exact commands for this app.
@@ -118,23 +118,31 @@ sudo nginx-gateway-ctl set-repo https://github.com/<you>/<repo>.git main
 - **Logs.** Gateway access and error logs, nginx's own logs, and an audit trail of who changed what.
 - **Settings.** Ports, allowed networks, auto-apply, passwords, administrators, and import/export.
 
-## Vite apps under a path
+## Add your own project (start here)
 
-This is the part that usually breaks. Vite builds for `/` by default, so under `/prajna/` the page
-asks for `/assets/…` and misses. Rewriting those URLs in nginx can't be done safely (the docs
-explain why). Instead, the app is started or built with `--base /prajna/`, and the gateway forwards
-the path to match. This usually takes **no file changes**: only the start command, plus an env var
-when the app reads its API address from one. **[docs/VITE_BASE_PATH.md](docs/VITE_BASE_PATH.md)**
-has the details.
+**[docs/GUIDE.md](docs/GUIDE.md)** is a step-by-step guide for every kind of project. It is written
+for beginners.
 
-To see exactly what a project needs, run this. It only reads files:
+The one thing to remember: the **frontend** must be told its base path, and that is usually one
+flag or setting. **Your backend needs no change at all.** The gateway removes the path before the
+request reaches it.
+
+| Project | What to change |
+|---|---|
+| Vite | start or build with `--base /myapp/` |
+| Next.js | `basePath: '/myapp'` in `next.config`, then rebuild |
+| Docker | pass the base path as a build argument, then rebuild the image |
+| Backend (any language) | nothing |
+| Cannot change the app | give it its own gateway port, nothing changes |
+
+To see what a project needs, run this. It only reads files:
 
 ```bash
-nginx-gateway-ctl vite-check ~/sql-llm/frontend --prefix /prajna/
+nginx-gateway-ctl vite-check ~/my-project/frontend --prefix /myapp/
 ```
 
-[docs/ADDING_PROJECTS.md](docs/ADDING_PROJECTS.md) walks through Prajna, Meeting Transcriber and
-Smart Finder.
+More detail: [docs/VITE_BASE_PATH.md](docs/VITE_BASE_PATH.md) explains why apps break under a
+path. [docs/ADDING_PROJECTS.md](docs/ADDING_PROJECTS.md) has ready-made recipes.
 
 ## Command reference
 
@@ -183,9 +191,10 @@ GW_NGINX_BIN=/tmp/ngx/usr/sbin/nginx pytest
 
 ## More
 
+- [docs/GUIDE.md](docs/GUIDE.md): **start here**, put any project on the gateway step by step
 - [docs/INSTALL.md](docs/INSTALL.md): install, update, uninstall, files and firewall
-- [docs/ADDING_PROJECTS.md](docs/ADDING_PROJECTS.md): worked examples and the JSON/API formats
+- [docs/ADDING_PROJECTS.md](docs/ADDING_PROJECTS.md): ready-made recipes and the JSON/API formats
 - [docs/VITE_BASE_PATH.md](docs/VITE_BASE_PATH.md): why subpaths break and how to fix them
-- [docs/DOCKER_SUBPATH.md](docs/DOCKER_SUBPATH.md): which files to change for a Docker Compose app (Vite or Next.js), with OccuSafe as the example
+- [docs/DOCKER_SUBPATH.md](docs/DOCKER_SUBPATH.md): which files to change for a Docker Compose app (Vite or Next.js), with a worked example
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 - [docs/SECURITY.md](docs/SECURITY.md): privilege separation, auth and isolation

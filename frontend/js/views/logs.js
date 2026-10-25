@@ -17,7 +17,7 @@ export function renderLogs(view, app) {
   try { source = sessionStorage.getItem('gw-log-source') || 'access'; } catch { /* storage blocked */ }
   const src = select(SOURCES, source, { 'aria-label': 'Log source' });
   const lines = select([100, 200, 500, 1000, 2000].map(n => ({ value: n, label: `${n} lines` })), 200, { 'aria-label': 'Lines' });
-  const filter = h('input', { class: 'input', placeholder: 'Filter, e.g. /prajna or 502', 'aria-label': 'Filter' });
+  const filter = h('input', { class: 'input', placeholder: 'Filter, e.g. /my-app or 502', 'aria-label': 'Filter' });
   const auto = h('input', { type: 'checkbox' });
   const out = h('pre', { class: 'code tall wrap', text: 'Loading…' });
   const meta = h('div', { class: 'faint' });

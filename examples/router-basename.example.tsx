@@ -1,5 +1,5 @@
 // React Router under a gateway path. import.meta.env.BASE_URL is what Vite's base/--base
-// was set to ("/" without the gateway, "/prajna/" behind it), so this works in both places.
+// was set to ("/" without the gateway, "/myapp/" behind it), so this works in both places.
 import { BrowserRouter, Routes, Route, createBrowserRouter } from 'react-router-dom'
 
 // Option 1: <BrowserRouter>
