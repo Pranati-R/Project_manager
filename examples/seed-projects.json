@@ -9,7 +9,7 @@
       "app_kind": "prebuilt",
       "pass_host_header": true,
       "runtime": "systemd",
-      "notes": "Example created at setup: the installed Prajna (.deb) serves a build made for /, so it gets its own gateway port. To move it to /prajna, rebuild with --base /prajna/ (see docs/ADDING_PROJECTS.md)."
+      "notes": "Example created at setup: the installed Prajna (.deb) serves a build made for /, so it gets its own gateway port. To move it to /prajna, rebuild with --base /prajna/ (see the Docs tab, page 'Apps you cannot change')."
     }
   ]
 }

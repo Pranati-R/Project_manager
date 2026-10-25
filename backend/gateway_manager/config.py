@@ -23,6 +23,7 @@ def _env(name: str, default: str) -> str:
 class Config:
     state_dir: Path = Path("/var/lib/nginx-gateway")
     frontend_dir: Path = APP_ROOT / "frontend"
+    docs_dir: Path = APP_ROOT / "docs"
     seed_file: Path = APP_ROOT / "examples" / "seed-projects.json"
     manager_port: int = 8790
     # "sudo": the root helper through `sudo -n` (production)
@@ -76,6 +77,7 @@ def load_config() -> Config:
     return Config(
         state_dir=state_dir,
         frontend_dir=Path(_env("GWM_FRONTEND_DIR", str(APP_ROOT / "frontend"))),
+        docs_dir=Path(_env("GWM_DOCS_DIR", str(APP_ROOT / "docs"))),
         seed_file=Path(_env("GWM_SEED_FILE", str(APP_ROOT / "examples" / "seed-projects.json"))),
         manager_port=int(_env("GWM_MANAGER_PORT", "8790")),
         helper_mode=_env("GWM_HELPER_MODE", "sudo"),

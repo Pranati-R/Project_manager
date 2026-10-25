@@ -70,8 +70,8 @@ Notes and display names never go into directives.
   on 8280. A project page cannot read dashboard responses or drive its API.
 - **Logins:** scrypt-hashed passwords. Several administrators are allowed.
 
-  > **Change the default login.** The default login `a@g.com` / `123456` is meant for the first
-  > sign-in only; the dashboard shows a banner until you change it.
+  > **Warning:** Change the default login. The default login `a@g.com` / `123456` is meant for the
+  > first sign-in only; the dashboard shows a banner until you change it.
 
 - **Sessions:**
   - stored server-side as random 256-bit tokens in an `HttpOnly`, `SameSite=Strict` cookie

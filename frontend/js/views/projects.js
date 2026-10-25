@@ -144,6 +144,19 @@ export async function openTest(p, app) {
   run();
 }
 
+// Docs pages that match a project: its app type, and Docker when it runs there
+const DOC_FOR_KIND = { vite_dev: 'vite', vite_preview: 'vite', static_dist: 'vite', backend_served: 'backends',
+  nextjs: 'nextjs', prebuilt: 'cannot-change', other: 'choose-type' };
+const DOC_TITLE = { vite: 'Vite setup', backends: 'Backends and APIs', nextjs: 'Next.js setup',
+  'cannot-change': 'Apps you cannot change', 'choose-type': 'Choose your project type', docker: 'Docker and Compose' };
+
+function docLinks(p) {
+  const slugs = [DOC_FOR_KIND[p.app_kind] || 'choose-type'];
+  if (p.runtime === 'docker') slugs.push('docker');
+  if (p.backend && !slugs.includes('backends')) slugs.push('backends');
+  return slugs.map(s => ({ href: `#/docs/${s}`, text: DOC_TITLE[s] }));
+}
+
 export async function openGuide(p) {
   const d = drawer(`Setup guide: ${p.name}`, 'What to change in the app so it works under its gateway path');
   d.body.append(h('div', { class: 'muted', text: 'Loading…' }));
@@ -153,6 +166,7 @@ export async function openGuide(p) {
       h('div', { class: 'banner info' }, h('div', { class: 'msg' }, 'Address: ', h('a', { href: g.url, target: '_blank', rel: 'noopener', text: g.url })),
         button('', { small: true, icon: 'copy', title: 'Copy address', onclick: () => copyText(g.url) })),
       g.warnings.map(w => h('div', { class: 'banner warn' }, h('div', { class: 'msg', text: w }))),
+      h('p', { class: 'muted' }, 'Want more detail? ', ...docLinks(p).flatMap((l, i) => [i ? ' · ' : null, h('a', { href: l.href, onclick: () => d.close(), text: l.text })])),
       g.sections.map(s => h('section', { class: 'guide-sec' },
         h('h3', { text: s.title }),
         s.text ? h('p', { text: s.text }) : null,

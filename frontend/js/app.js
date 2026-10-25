@@ -6,12 +6,14 @@ import { renderProjects } from './views/projects.js';
 import { renderConfig } from './views/config.js';
 import { renderLogs } from './views/logs.js';
 import { renderSettings } from './views/settings.js';
+import { renderDocs } from './views/docs.js';
 
 const root = document.getElementById('app');
 const ROUTES = {
   projects: { label: 'Projects', render: renderProjects },
   config: { label: 'Nginx config', render: renderConfig },
   logs: { label: 'Logs', render: renderLogs },
+  docs: { label: 'Docs', render: renderDocs },
   settings: { label: 'Settings', render: renderSettings },
 };
 

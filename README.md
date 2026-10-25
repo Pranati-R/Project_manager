@@ -71,7 +71,7 @@ At the end it prints the addresses:
   Login      a@g.com / 123456  (change it: Settings, or sudo nginx-gateway-ctl passwd)
 ```
 
-**Install guide:** [docs/INSTALL.md](docs/INSTALL.md) covers every file setup touches, private repositories, firewall and uninstalling.
+**Install guide:** [docs/install.md](docs/install.md) covers every file setup touches, private repositories, firewall and uninstalling.
 
 ## Updating: push to GitHub, then run one command
 
@@ -120,8 +120,9 @@ sudo nginx-gateway-ctl set-repo https://github.com/<you>/<repo>.git main
 
 ## Add your own project (start here)
 
-**[docs/GUIDE.md](docs/GUIDE.md)** is a step-by-step guide for every kind of project. It is written
-for beginners.
+Open the **Docs** tab in the dashboard (or read the files in [docs/](docs/)). It has a step-by-step
+guide for every kind of project and is written for beginners. Start with
+[docs/quick-start.md](docs/quick-start.md).
 
 The one thing to remember: the **frontend** must be told its base path, and that is usually one
 flag or setting. **Your backend needs no change at all.** The gateway removes the path before the
@@ -141,8 +142,8 @@ To see what a project needs, run this. It only reads files:
 nginx-gateway-ctl vite-check ~/my-project/frontend --prefix /myapp/
 ```
 
-More detail: [docs/VITE_BASE_PATH.md](docs/VITE_BASE_PATH.md) explains why apps break under a
-path. [docs/ADDING_PROJECTS.md](docs/ADDING_PROJECTS.md) has ready-made recipes.
+More detail: [docs/why-it-breaks.md](docs/why-it-breaks.md) explains why apps break under a path.
+[docs/examples.md](docs/examples.md) has ready-made recipes.
 
 ## Command reference
 
@@ -191,10 +192,11 @@ GW_NGINX_BIN=/tmp/ngx/usr/sbin/nginx pytest
 
 ## More
 
-- [docs/GUIDE.md](docs/GUIDE.md): **start here**, put any project on the gateway step by step
-- [docs/INSTALL.md](docs/INSTALL.md): install, update, uninstall, files and firewall
-- [docs/ADDING_PROJECTS.md](docs/ADDING_PROJECTS.md): ready-made recipes and the JSON/API formats
-- [docs/VITE_BASE_PATH.md](docs/VITE_BASE_PATH.md): why subpaths break and how to fix them
-- [docs/DOCKER_SUBPATH.md](docs/DOCKER_SUBPATH.md): which files to change for a Docker Compose app (Vite or Next.js), with a worked example
-- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
-- [docs/SECURITY.md](docs/SECURITY.md): privilege separation, auth and isolation
+The same pages are in the dashboard under **Docs**. The sidebar order is set in
+[docs/nav.json](docs/nav.json).
+
+- Getting started: [welcome](docs/welcome.md), [how it works](docs/how-it-works.md), [quick start](docs/quick-start.md), [glossary](docs/glossary.md)
+- Set up your project: [choose a type](docs/choose-type.md), [Vite](docs/vite.md), [Next.js](docs/nextjs.md), [other frontends](docs/other-frontends.md), [backends](docs/backends.md), [Docker](docs/docker.md), [apps you cannot change](docs/cannot-change.md)
+- Using the dashboard: [tour](docs/dashboard-tour.md), [every field](docs/project-fields.md), [testing](docs/testing.md)
+- Help: [troubleshooting](docs/troubleshooting.md), [FAQ](docs/faq.md), [why apps break](docs/why-it-breaks.md)
+- Reference: [cheat sheet](docs/cheat-sheet.md), [examples](docs/examples.md), [JSON and API](docs/json-api.md), [command line](docs/cli.md), [install](docs/install.md), [security](docs/security.md)

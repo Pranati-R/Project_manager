@@ -1,6 +1,6 @@
 """Read-only check of a Vite project folder for subpath (gateway) readiness.
 
-    nginx-gateway-ctl vite-check ~/prajna --prefix /prajna/
+    nginx-gateway-ctl vite-check ~/myapp --prefix /myapp/
 
 It only reads files: package.json, vite.config.* and the source tree. It reports what
 would break under the prefix and prints the commands and one-line changes to fix it.

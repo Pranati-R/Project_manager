@@ -369,7 +369,7 @@ cmd_update_code() {
     fi
     gitapp remote set-url origin "$GIT_REPO_URL"
     say "Fetching $GIT_REPO_URL ($branch)"
-    gitapp fetch --quiet origin "$branch" || die "could not fetch branch '$branch' (private repository? see docs/INSTALL.md)"
+    gitapp fetch --quiet origin "$branch" || die "could not fetch branch '$branch' (private repository? see docs/install.md)"
     local old new
     old=$(gitapp rev-parse -q --verify HEAD 2>/dev/null || true)
     new=$(gitapp rev-parse FETCH_HEAD)

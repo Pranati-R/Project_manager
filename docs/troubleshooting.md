@@ -1,7 +1,35 @@
 # Troubleshooting
 
-Start with **Test** on the project. It checks the app directly, then through the gateway, and names
-the problem. These commands help:
+Something not working? Do these three things first:
+
+1. Press **Test** on the project. It names the problem and says what to do.
+2. Open the **Logs** tab and look at the **Gateway error log**.
+3. Open your browser's developer tools (see the next section).
+
+## How to look inside your browser
+
+Press `F12` (or right-click the page and choose **Inspect**). Two tabs matter:
+
+| Tab | What it shows |
+|---|---|
+| **Console** | Red error messages from your page. |
+| **Network** | Every file and API call the page asked for, with a status number. Reload the page with this tab open. |
+
+How to read the **Network** tab:
+
+| Status | Meaning |
+|---|---|
+| `200` | It worked. |
+| `404` | Not found. The address is wrong. A `404` on `/assets/...` means the base path is missing. |
+| `403` | Not allowed (your network, or Vite's host check). |
+| `502` / `504` | The gateway could not reach your app. Is it running? |
+| `413` | An upload was too large. |
+
+> **Tip:** Click a red line in the Network tab and look at its **address**. If it does not start with
+> your project path (`/myapp/...`), the app is asking the wrong place. That is the base path problem. See
+> [Vite](vite.md) or [Next.js](nextjs.md).
+
+These commands help the server administrator:
 
 ```bash
 sudo nginx-gateway-ctl status                 # services, ports, projects, code version
@@ -18,16 +46,16 @@ sudo nginx -t                                 # the whole nginx configuration
 | **502 Bad Gateway** | The app is not running, or it listens on another port/address | Start it. Test shows "connection refused" and the port it tried |
 | 502, but the app runs | It listens on `::1` only. Node 17+ resolves `localhost` to IPv6, and the gateway connects to 127.0.0.1 | Start it with `--host 127.0.0.1`, or set the project's host to `::1` |
 | **504** | The app accepted the connection but did not answer in time | Check the app; raise the project's Timeout for slow requests |
-| **Blank page**, console shows 404s for `/assets/...` | The app was built/started for `/` | Start/build with `--base /prefix/`; see [VITE_BASE_PATH.md](VITE_BASE_PATH.md). Test names the files |
+| **Blank page**, console shows 404s for `/assets/...` | The app was built/started for `/` | Start/build with `--base /myapp/`; see [Vite](vite.md). Test names the files |
 | Page loads, but navigation shows "not found" | React Router has no basename | `basename={import.meta.env.BASE_URL}` |
-| Page loads, API calls 404 at `/api/...` | Root-absolute API URLs | Set the app's API env var (`VITE_API_BASE=/prefix/api`) or build URLs from `BASE_URL` |
-| "Blocked request. This host is not allowed" | Vite's host check (Vite ≥ 6.0.9) | Turn off "Pass the original Host header" for the project (the Vite preset does) |
+| Page loads, API calls 404 at `/api/...` | Root-absolute API URLs | Set the app's API env var (`VITE_API_BASE=/myapp/api`) or build URLs from `BASE_URL` |
+| "Blocked request. This host is not allowed" | Vite's host check (Vite ≥ 6.0.9) | Turn off "Pass the original Host header" for the project (the Vite App types do this) |
 | Hot reload does not connect | `server.hmr.port` is set in vite.config | Remove it, or set `hmr.clientPort: 8280` |
 | **403 Forbidden** from nginx | Your device is not in "Allowed networks" | Connect through Tailscale, or add the network in Settings |
 | WebSocket closes after ~1 h | Timeout | Raise the project's Timeout |
 | Streaming answers arrive all at once | Buffering | Leave "Buffer API responses" off for that API |
 | **413 Request Entity Too Large** | Upload larger than the limit | Raise Max upload on the project (or the default in Settings) |
-| `/prefix` without a slash | It redirects to `/prefix/` (301) | expected |
+| `/myapp` without a slash | It redirects to `/myapp/` (301) | expected |
 | The app works directly on its port from another machine | It listens on `0.0.0.0` | Bind it to 127.0.0.1; for Docker use `-p 127.0.0.1:PORT:...` (Docker ports bypass ufw) |
 
 ## Saving and applying
@@ -62,7 +90,7 @@ weren't changed.
 | `apt install nginx` failed earlier with "bind() to 0.0.0.0:80 failed" | Apache owns :80 and nginx's default site wants it. `sudo rm /etc/nginx/sites-enabled/default && sudo dpkg --configure -a`; `nginx-gateway-ctl setup` avoids this by itself |
 | Setup stops with "port 8790 is already used by: python3" (or 8280/8281) | Another program has that port. Run setup again with the option it names, e.g. `sudo nginx-gateway-ctl setup --manager-port 8791`; nothing was changed |
 | Setup warns "your nginx.conf does not include /etc/nginx/conf.d/*.conf" | Your nginx.conf is custom. Add `include /etc/nginx/conf.d/*.conf;` inside `http { }`, then `sudo nginx-gateway-ctl apply` |
-| `update-code` "could not fetch" | Private repository; see INSTALL.md (deploy key or token) |
+| `update-code` "could not fetch" | Private repository; see [Install](install.md) (deploy key or token) |
 | `update-code` rolled back | The new code failed a step; the reason is in `/var/log/nginx-gateway/update.log`. Fix it, push, run again |
 | Dashboard does not open | `nginx-gateway-ctl status`; the manager must be `active` and port 8281 `up`. Or use an SSH tunnel: `ssh -L 8790:127.0.0.1:8790 server`, then `http://127.0.0.1:8790/` |
 

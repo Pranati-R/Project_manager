@@ -58,7 +58,7 @@
     location {{ p.fe_location|tok }} {
         proxy_pass {{ p.fe_pass|tok }};
 {%- if p.fe_mode == "rewrite" %}
-        # best-effort rewriting of root-absolute URLs (see docs/VITE_BASE_PATH.md)
+        # best-effort rewriting of root-absolute URLs (see docs/why-it-breaks.md)
         proxy_set_header Accept-Encoding "";
         sub_filter_once off;
         sub_filter_types text/css application/javascript text/javascript;

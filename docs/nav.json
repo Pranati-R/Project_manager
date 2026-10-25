@@ -1,0 +1,52 @@
+{
+  "groups": [
+    {
+      "title": "Getting started",
+      "pages": [
+        {"slug": "welcome", "title": "Welcome", "file": "welcome.md", "summary": "What the gateway is and who these docs are for"},
+        {"slug": "how-it-works", "title": "How it works", "file": "how-it-works.md", "summary": "One door, many paths: the idea behind everything"},
+        {"slug": "quick-start", "title": "Quick start", "file": "quick-start.md", "summary": "Put your first project online in 10 minutes"},
+        {"slug": "glossary", "title": "Glossary", "file": "glossary.md", "summary": "Every technical word explained simply"}
+      ]
+    },
+    {
+      "title": "Set up your project",
+      "pages": [
+        {"slug": "choose-type", "title": "Choose your project type", "file": "choose-type.md", "summary": "Find the right setup page for your project"},
+        {"slug": "vite", "title": "Vite (React, Vue, Svelte)", "file": "vite.md", "summary": "Use --base so Vite apps work under a path"},
+        {"slug": "nextjs", "title": "Next.js", "file": "nextjs.md", "summary": "Use basePath and rebuild"},
+        {"slug": "other-frontends", "title": "Other frontends", "file": "other-frontends.md", "summary": "Angular, Create React App, Vue CLI, SvelteKit, Nuxt, plain HTML"},
+        {"slug": "backends", "title": "Backends and APIs", "file": "backends.md", "summary": "Your backend needs no change"},
+        {"slug": "docker", "title": "Docker and Compose", "file": "docker.md", "summary": "Pass the path at build time and rebuild"},
+        {"slug": "cannot-change", "title": "Apps you cannot change", "file": "cannot-change.md", "summary": "Give the app its own gateway port"}
+      ]
+    },
+    {
+      "title": "Using the dashboard",
+      "pages": [
+        {"slug": "dashboard-tour", "title": "Dashboard tour", "file": "dashboard-tour.md", "summary": "What every tab and button does"},
+        {"slug": "project-fields", "title": "Add a project: every field", "file": "project-fields.md", "summary": "Each form field in plain words"},
+        {"slug": "testing", "title": "Testing your project", "file": "testing.md", "summary": "What the Test results mean"}
+      ]
+    },
+    {
+      "title": "Help",
+      "pages": [
+        {"slug": "troubleshooting", "title": "Troubleshooting", "file": "troubleshooting.md", "summary": "Symptom, cause, fix"},
+        {"slug": "faq", "title": "FAQ", "file": "faq.md", "summary": "Quick answers to common questions"},
+        {"slug": "why-it-breaks", "title": "Why apps break under a path", "file": "why-it-breaks.md", "summary": "The deep dive"}
+      ]
+    },
+    {
+      "title": "Reference",
+      "pages": [
+        {"slug": "cheat-sheet", "title": "Cheat sheet", "file": "cheat-sheet.md", "summary": "Every framework on one page"},
+        {"slug": "examples", "title": "Examples", "file": "examples.md", "summary": "Ready-made recipes"},
+        {"slug": "json-api", "title": "Project fields, JSON and API", "file": "json-api.md", "summary": "For scripts and bulk import"},
+        {"slug": "cli", "title": "Command line", "file": "cli.md", "summary": "nginx-gateway-ctl commands"},
+        {"slug": "install", "title": "Install, update, uninstall", "file": "install.md", "summary": "For the server administrator"},
+        {"slug": "security", "title": "Security and isolation", "file": "security.md", "summary": "How the gateway stays safe"}
+      ]
+    }
+  ]
+}

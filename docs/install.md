@@ -4,7 +4,7 @@ The target is Ubuntu 22.04 or 24.04 with systemd. Python 3.10+ ships with both.
 
 ## 1. Put the code on GitHub
 
-The installed system pulls its code from a git repository, the same way Smart Finder does.
+The installed system pulls its code from a git repository, so that one command (`update-code`) updates it.
 
 ```bash
 git remote add origin https://github.com/Pranati-R/Project_manager.git
@@ -72,8 +72,8 @@ default site on port 80, collide with Apache and fail.
    - the copy inside the package when GitHub is unreachable
 6. **Creates the Python environment**: `/opt/nginx-gateway/venv` with the pinned packages from
    `backend/requirements.txt`.
-7. **Creates the state.** `/var/lib/nginx-gateway/state.json` gets an example *Prajna* project
-   (8200/8201) and `users.json` gets the default login **a@g.com / 123456**. Use
+7. **Creates the state.** `/var/lib/nginx-gateway/state.json` gets an example project
+   (ports 8200/8201) and `users.json` gets the default login **a@g.com / 123456**. Use
    `--gateway-port`/`--admin-port`/`--manager-port` to start on other ports (setup suggests a free one when a port is taken).
 8. **Applies the config.** It writes `/etc/nginx/nginx-gateway/gateway.conf` and the one-line
    `/etc/nginx/conf.d/nginx-gateway.conf`, runs `nginx -t`, then reloads nginx. A freshly installed
