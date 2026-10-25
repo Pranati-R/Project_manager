@@ -20,7 +20,7 @@ def pages():
 def test_docs_need_login(ctx):  # noqa: F811
     client, _, _ = ctx
     assert client.get("/api/docs").status_code == 401
-    assert client.get("/api/docs/welcome").status_code == 401
+    assert client.get("/api/docs/getting-started").status_code == 401
 
 
 def test_index_and_page(ctx):  # noqa: F811

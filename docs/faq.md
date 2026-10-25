@@ -17,7 +17,7 @@ Usually **only the base path**: one flag or one setting. It depends on the frame
 ### What is a "base path"?
 
 The address your frontend lives at. Behind the gateway it is your project path, for example `/shop/`.
-See [How it works](how-it-works.md).
+See [Getting started](getting-started.md).
 
 ### Do I need to know nginx?
 

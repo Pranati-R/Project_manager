@@ -29,7 +29,7 @@ Your main page. Each row is one project.
 |---|---|
 | **Green dot** | The app answers on its port. Red: it does not. |
 | **/shop -> 127.0.0.1:5173** | The route: the path on the left goes to the app on the right. |
-| **subpath / strip prefix** | The path mode ([How it works](how-it-works.md)). |
+| **subpath / strip prefix** | The path mode ([Getting started](getting-started.md)). |
 | **On/off switch** | Switches the route on or off without deleting it. A disabled path shows 404. |
 | **Open** | Opens the project in a new tab. |
 | **Test** | Checks the app and the route. See [Testing your project](testing.md). |

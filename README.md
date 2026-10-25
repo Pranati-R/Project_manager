@@ -122,7 +122,7 @@ sudo nginx-gateway-ctl set-repo https://github.com/<you>/<repo>.git main
 
 Open the **Docs** tab in the dashboard (or read the files in [docs/](docs/)). It has a step-by-step
 guide for every kind of project and is written for beginners. Start with
-[docs/quick-start.md](docs/quick-start.md).
+[docs/getting-started.md](docs/getting-started.md).
 
 The one thing to remember: the **frontend** must be told its base path, and that is usually one
 flag or setting. **Your backend needs no change at all.** The gateway removes the path before the
@@ -195,7 +195,7 @@ GW_NGINX_BIN=/tmp/ngx/usr/sbin/nginx pytest
 The same pages are in the dashboard under **Docs**. The sidebar order is set in
 [docs/nav.json](docs/nav.json).
 
-- Getting started: [welcome](docs/welcome.md), [how it works](docs/how-it-works.md), [quick start](docs/quick-start.md), [glossary](docs/glossary.md)
+- Getting started: [getting started](docs/getting-started.md)
 - Set up your project: [choose a type](docs/choose-type.md), [Vite](docs/vite.md), [Next.js](docs/nextjs.md), [other frontends](docs/other-frontends.md), [backends](docs/backends.md), [Docker](docs/docker.md), [apps you cannot change](docs/cannot-change.md)
 - Using the dashboard: [tour](docs/dashboard-tour.md), [every field](docs/project-fields.md), [testing](docs/testing.md)
 - Help: [troubleshooting](docs/troubleshooting.md), [FAQ](docs/faq.md), [why apps break](docs/why-it-breaks.md)

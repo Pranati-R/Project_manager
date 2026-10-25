@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nginx Gateway: How It Works</title>
+<style>
+  :root {
+    --bg: #ffffff; --soft: #f5f7fa; --line: #dde2ea; --text: #1d2433; --muted: #5a6475;
+    --blue: #2f6fde; --blue-soft: #e8f0fd; --green: #1f8a4c; --green-soft: #e5f5ec;
+    --amber: #a5650a; --amber-soft: #fcf2df; --red: #c2362f; --red-soft: #fbe8e6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .page { max-width: 860px; margin: 0 auto; padding: 40px 24px 72px; }
+  header.cover { border-bottom: 3px solid var(--blue); padding-bottom: 20px; margin-bottom: 28px; }
+  header.cover .tag { color: var(--blue); font-weight: 700; letter-spacing: .08em; font-size: 13px; text-transform: uppercase; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 6px 0 8px; }
+  header.cover p { color: var(--muted); margin: 0; font-size: 17px; }
+  h2 { font-size: 24px; margin: 46px 0 10px; padding-top: 18px; border-top: 1px solid var(--line); }
+  h2 .n { display: inline-block; background: var(--blue); color: #fff; border-radius: 8px; width: 34px; height: 34px;
+    text-align: center; line-height: 34px; font-size: 18px; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 26px 0 6px; }
+  p { margin: 0 0 14px; }
+  ul, ol { margin: 0 0 14px; padding-left: 24px; } li { margin: 5px 0; }
+  code { background: var(--soft); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px;
+    font: 14px ui-monospace, SFMono-Regular, Consolas, monospace; }
+  pre { background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto;
+    font: 13.5px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; margin: 0 0 16px; }
+  pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 18px; font-size: 15px; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 12px; border: 1px solid var(--line); }
+  th { background: var(--soft); font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .box { border-left: 4px solid var(--blue); background: var(--blue-soft); border-radius: 8px; padding: 12px 16px; margin: 0 0 16px; }
+  .box.tip { border-color: var(--green); background: var(--green-soft); }
+  .box.warn { border-color: var(--amber); background: var(--amber-soft); }
+  .box b.t { display: block; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 2px; }
+  .box p:last-child { margin-bottom: 0; }
+
+  /* simple diagrams */
+  .diagram { display: flex; flex-direction: column; align-items: center; gap: 0; margin: 16px 0 22px; }
+  .node { border: 2px solid var(--blue); background: var(--blue-soft); border-radius: 10px; padding: 10px 18px; text-align: center;
+    min-width: 260px; font-weight: 600; }
+  .node small { display: block; font-weight: 400; color: var(--muted); font-size: 13px; }
+  .node.green { border-color: var(--green); background: var(--green-soft); }
+  .node.amber { border-color: var(--amber); background: var(--amber-soft); }
+  .node.plain { border-color: var(--line); background: #fff; }
+  .arrow { color: var(--blue); font-size: 22px; line-height: 1.1; padding: 2px 0; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .steps { counter-reset: s; list-style: none; padding: 0; }
+  .steps li { counter-increment: s; position: relative; padding: 12px 14px 12px 56px; border: 1px solid var(--line);
+    border-radius: 10px; margin: 0 0 10px; background: #fff; }
+  .steps li::before { content: counter(s); position: absolute; left: 14px; top: 12px; width: 28px; height: 28px; border-radius: 50%;
+    background: var(--blue); color: #fff; text-align: center; line-height: 28px; font-weight: 700; font-size: 14px; }
+  .steps li b { display: block; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .cols > div { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .cols .bad { border-color: #f0b7b3; background: var(--red-soft); }
+  .cols .good { border-color: #a9dcbc; background: var(--green-soft); }
+  .cols h4 { margin: 0 0 6px; font-size: 14px; text-transform: uppercase; letter-spacing: .05em; }
+  .toc { background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 14px 20px; }
+  .toc ol { margin: 0; } .toc a { color: var(--blue); text-decoration: none; } .toc a:hover { text-decoration: underline; }
+  footer { margin-top: 48px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+  @media (max-width: 640px) { .cols { grid-template-columns: 1fr; } h1 { font-size: 28px; } .node { min-width: 0; width: 100%; } }
+  @media print { .page { padding: 0; } h2 { break-after: avoid; } pre, table, .box, .steps li, .cols { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="cover">
+  <div class="tag">Project report</div>
+  <h1>Nginx Gateway: How It Works</h1>
+  <p>How the gateway runs, how a project is added, how nginx is updated, and what your own project needs to change.</p>
+</header>
+
+<div class="toc">
+  <b>Contents</b>
+  <ol>
+    <li><a href="#what">What the gateway is</a></li>
+    <li><a href="#parts">The parts and how they fit</a></li>
+    <li><a href="#request">What happens when someone opens a project</a></li>
+    <li><a href="#adding">How a project is added</a></li>
+    <li><a href="#nginx">How nginx is updated (safely)</a></li>
+    <li><a href="#running">How everything keeps running</a></li>
+    <li><a href="#changes">What changes in your project (general example)</a></li>
+    <li><a href="#summary">Summary</a></li>
+  </ol>
+</div>
+
+<!-- 1 -->
+<h2 id="what"><span class="n">1</span>What the gateway is</h2>
+<p>A <b>gateway</b> is one front door for many web projects. Instead of giving every project its own port that people must remember, all projects share <b>one port</b>, and each one gets its own <b>path</b> after it.</p>
+<table>
+  <tr><th>Without the gateway</th><th>With the gateway</th></tr>
+  <tr><td><code>http://server:5173</code> (shop)<br><code>http://server:3000</code> (blog)<br><code>http://server:8000</code> (notes)</td>
+      <td><code>http://server:8280/shop/</code><br><code>http://server:8280/blog/</code><br><code>http://server:8280/notes/</code></td></tr>
+</table>
+<p>The gateway is made of <b>nginx</b> (a well-known web server) plus a <b>dashboard</b> that writes nginx's settings for you. Nobody edits nginx files by hand.</p>
+<div class="box tip"><b class="t">In one sentence</b><p>You tell the dashboard "the project <i>shop</i> runs on port 5173 and should appear at <code>/shop/</code>"; the dashboard builds and safely installs the nginx settings that make it so.</p></div>
+
+<!-- 2 -->
+<h2 id="parts"><span class="n">2</span>The parts and how they fit</h2>
+<div class="diagram">
+  <div class="node plain">Browser<small>on your private network (Tailscale)</small></div>
+  <div class="arrow">&darr;</div>
+  <div class="row">
+    <div class="node">Port 8280: the gateway<small>nginx: every project, by path</small></div>
+    <div class="node">Port 8281: the dashboard<small>nginx forwards to the manager</small></div>
+  </div>
+  <div class="arrow">&darr;</div>
+  <div class="row">
+    <div class="node green">Your projects<small>each listens on 127.0.0.1 only</small></div>
+    <div class="node amber">Manager (port 8790)<small>the dashboard's backend, 127.0.0.1 only</small></div>
+  </div>
+  <div class="arrow">&darr; (one fixed, safe command)</div>
+  <div class="node amber">Helper (runs as root)<small>checks, installs and reloads nginx config</small></div>
+</div>
+<table>
+  <tr><th>Part</th><th>Job</th></tr>
+  <tr><td><b>nginx</b></td><td>Receives every visit and passes it to the right project.</td></tr>
+  <tr><td><b>Dashboard</b></td><td>The web page where you add, test, switch on/off and delete projects.</td></tr>
+  <tr><td><b>Manager</b></td><td>The program behind the dashboard. It stores the projects and builds the nginx settings. It runs as a limited user, not root.</td></tr>
+  <tr><td><b>Helper</b></td><td>The only part with root rights. It can do a short fixed list of things (check, install and reload the gateway config) and nothing else.</td></tr>
+  <tr><td><b>Your projects</b></td><td>Your frontends and backends. They are never changed by the gateway.</td></tr>
+</table>
+<div class="box"><b class="t">Why 127.0.0.1?</b><p><code>127.0.0.1</code> means "this same computer". A project that listens only there can be reached only through the gateway, so nobody can skip the gateway's rules (for example, who is allowed in).</p></div>
+
+<!-- 3 -->
+<h2 id="request"><span class="n">3</span>What happens when someone opens a project</h2>
+<p>Someone opens <code>http://server:8280/shop/products</code>:</p>
+<ol class="steps">
+  <li><b>The browser asks the server</b>Request goes to port 8280.</li>
+  <li><b>nginx checks who is asking</b>Only devices on the allowed network (Tailscale and the server itself) get through. Others get "403 Forbidden".</li>
+  <li><b>nginx reads the path</b>It starts with <code>/shop</code>, so this belongs to the project <i>shop</i>.</li>
+  <li><b>nginx forwards the request</b>To the project at <code>127.0.0.1:5173</code>, adjusting the path (see below).</li>
+  <li><b>The project answers</b>nginx sends the answer back to the browser.</li>
+</ol>
+
+<h3>Two ways of passing the path on</h3>
+<table>
+  <tr><th>Path mode</th><th><code>/shop/page</code> reaches the project as</th><th>Used for</th></tr>
+  <tr><td><code>strip</code></td><td><code>/page</code> (project path removed)</td><td>Built files served by nginx / Docker, or served by your own backend</td></tr>
+  <tr><td><code>subpath</code></td><td><code>/shop/page</code> (kept)</td><td>Vite dev server, Vite preview, Next.js</td></tr>
+</table>
+<p>Backend APIs work the same way. A request for <code>/shop/api/users</code> reaches the backend as <code>/api/users</code>, which is why <b>a backend needs no change</b>.</p>
+
+<!-- 4 -->
+<h2 id="adding"><span class="n">4</span>How a project is added</h2>
+<p>In the dashboard, <b>Projects &rarr; Add project</b>. You fill in a name, the app type, the URL path and the port. Behind the scenes:</p>
+<ol class="steps">
+  <li><b>You fill in the form</b>For example: name <i>Shop</i>, path <code>/shop</code>, App type <i>Vite dev server</i>, port <code>5173</code>. The App type fills in the technical options for you.</li>
+  <li><b>The manager checks every value</b>Is the path valid and unused? Is the port free and not used by another site? A mistake is shown next to the field and nothing changes.</li>
+  <li><b>The project is saved</b>It is stored in the manager's own state file.</li>
+  <li><b>The nginx settings are generated</b>The manager builds one complete gateway config from <i>all</i> projects using a template.</li>
+  <li><b>The change is tested and installed</b>See the next section: the config is tested, installed and nginx is reloaded.</li>
+  <li><b>You press Test</b>The dashboard checks that the app answers, that the page loads through the gateway and that its files load from the right path.</li>
+</ol>
+<div class="box"><b class="t">Live preview</b><p>While you type, the form shows the nginx routes that will be created, so you can see the result before saving.</p></div>
+
+<!-- 5 -->
+<h2 id="nginx"><span class="n">5</span>How nginx is updated (safely)</h2>
+<p>The gateway's nginx settings live in one generated file: <code>/etc/nginx/nginx-gateway/gateway.conf</code>. It is written <b>only</b> by the helper, and only after the checks below. The rest of nginx (your other sites) is never edited.</p>
+<div class="diagram">
+  <div class="node">1. Generate<small>manager builds the config from all projects</small></div><div class="arrow">&darr;</div>
+  <div class="node">2. Test in a private sandbox<small>nginx -t on the new file alone</small></div><div class="arrow">&darr;</div>
+  <div class="node amber">3. Helper: lint<small>only the expected kinds of lines are allowed</small></div><div class="arrow">&darr;</div>
+  <div class="node amber">4. Helper: conflict scan<small>no other site or program already uses these ports</small></div><div class="arrow">&darr;</div>
+  <div class="node amber">5. Back up the live file<small>last 30 versions are kept</small></div><div class="arrow">&darr;</div>
+  <div class="node amber">6. Replace the file in one step<small>then nginx -t on the whole nginx setup</small></div><div class="arrow">&darr;</div>
+  <div class="node green">7. Graceful reload<small>visitors are not cut off; then it confirms nginx listens on the new ports</small></div>
+</div>
+<div class="box warn"><b class="t">If any step fails</b><p>The previous file is put back, nginx keeps running with the old settings, and the dashboard shows what went wrong. A bad change never goes live.</p></div>
+<table>
+  <tr><th>Other things you can do</th><th>How</th></tr>
+  <tr><td>Undo a mistake</td><td><b>Nginx config &rarr; Backups &rarr; Restore</b> (tested first)</td></tr>
+  <tr><td>See what changed</td><td><b>Nginx config &rarr; Changes</b> (a diff against the live file)</td></tr>
+  <tr><td>Update the gateway software</td><td><code>sudo nginx-gateway-ctl update-code</code> pulls the new code, restarts the manager and re-applies the config. It rolls back by itself if a step fails.</td></tr>
+</table>
+
+<!-- 6 -->
+<h2 id="running"><span class="n">6</span>How everything keeps running</h2>
+<ul>
+  <li><b>nginx</b> runs as the normal system service and serves the gateway on port 8280 and the dashboard on 8281.</li>
+  <li><b>The manager</b> runs as a system service (<code>nginx-gateway-manager</code>) on <code>127.0.0.1:8790</code>, as a limited account without a shell.</li>
+  <li><b>Your projects</b> keep running the way you already start them (a terminal, <code>systemd</code>, or Docker). The gateway never starts or changes them. If you list an app in the restart list, the dashboard can restart it with one button.</li>
+  <li><b>The dashboard checks health</b> every few seconds: a green dot means the project answers on its port.</li>
+  <li><b>Logs</b> are in the dashboard's Logs tab: access log, error log, and an audit trail of who changed what.</li>
+  <li><b>Security basics:</b> sign-in with passwords and sessions, protection against forged requests, only allowed networks can connect, and everything the helper may do is limited to a fixed list.</li>
+</ul>
+
+<!-- 7 -->
+<h2 id="changes"><span class="n">7</span>What changes in your project (general example)</h2>
+<p>Under the gateway your project lives at <code>/myapp/</code>, not at <code>/</code>. Most frameworks write links that start with <code>/</code>, so <b>the frontend must be told its base path</b>. The backend is never told.</p>
+
+<div class="cols">
+  <div class="bad"><h4>Without the base path</h4>
+    <p>The page asks for <code>/assets/app.js</code>. That is outside <code>/myapp/</code>, so the gateway finds no project: blank page.</p></div>
+  <div class="good"><h4>With the base path</h4>
+    <p>The page asks for <code>/myapp/assets/app.js</code>. The gateway knows it belongs to <i>myapp</i>: the page loads.</p></div>
+</div>
+
+<h3>What needs a change, and what does not</h3>
+<table>
+  <tr><th>Part</th><th>Change?</th><th>What to do</th></tr>
+  <tr><td>Frontend (Vite, Next.js, React, Vue...)</td><td><b>Yes</b></td><td>Set the base path (one flag or setting), then rebuild if it is a built app.</td></tr>
+  <tr><td>Backend (FastAPI, Flask, Express, Django...)</td><td><b>No</b></td><td>Nothing. Only make it listen on <code>127.0.0.1</code>.</td></tr>
+  <tr><td>nginx</td><td><b>No</b></td><td>The dashboard does it.</td></tr>
+  <tr><td>Docker</td><td><b>Rebuild</b></td><td>Pass the base path as a build argument and rebuild the image.</td></tr>
+  <tr><td>An app you cannot change</td><td><b>No</b></td><td>Give it its own gateway port instead of a path.</td></tr>
+</table>
+
+<h3>Example: a Vite frontend with a backend</h3>
+<p><b>1. Start the frontend with its base path</b> (this is the only frontend change for the dev server):</p>
+<pre><code># before
+npm run dev
+
+# after
+npm run dev -- --base /myapp/ --host 127.0.0.1 --port 5173 --strictPort</code></pre>
+<p><b>2. Start the backend as usual</b>, only on <code>127.0.0.1</code>:</p>
+<pre><code>uvicorn main:app --host 127.0.0.1 --port 8000      # code unchanged</code></pre>
+<p><b>3. Point the frontend at the API through the gateway</b> (use the app's API variable if it has one, so no code changes):</p>
+<pre><code>VITE_API_BASE=/myapp/api npm run dev -- --base /myapp/ --host 127.0.0.1 --port 5173 --strictPort</code></pre>
+<p><b>4. Add the project in the dashboard:</b></p>
+<table>
+  <tr><th>Setting</th><th>Value</th></tr>
+  <tr><td>URL path</td><td><code>/myapp</code></td></tr>
+  <tr><td>App type</td><td>Vite dev server</td></tr>
+  <tr><td>Frontend port</td><td><code>5173</code></td></tr>
+  <tr><td>Separate API server</td><td>ticked: port <code>8000</code>, API path <code>/api</code></td></tr>
+</table>
+<p><b>5. Result:</b></p>
+<table>
+  <tr><th>Browser asks for</th><th>Goes to</th></tr>
+  <tr><td><code>http://server:8280/myapp/</code></td><td>the frontend</td></tr>
+  <tr><td><code>http://server:8280/myapp/api/users</code></td><td>the backend, as <code>/api/users</code> (backend untouched)</td></tr>
+</table>
+
+<h3>Other frameworks: the same idea</h3>
+<table>
+  <tr><th>Framework</th><th>Base path setting</th></tr>
+  <tr><td>Vite (build)</td><td><code>vite build --base /myapp/</code></td></tr>
+  <tr><td>Next.js</td><td><code>basePath: '/myapp'</code> in <code>next.config.js</code>, then rebuild</td></tr>
+  <tr><td>Angular</td><td><code>ng build --base-href /myapp/</code></td></tr>
+  <tr><td>Create React App</td><td><code>PUBLIC_URL=/myapp npm run build</code></td></tr>
+  <tr><td>Docker (Vite)</td><td><code>ARG VITE_BASE_PATH=/</code> and <code>npm run build -- --base ${VITE_BASE_PATH}</code>, then <code>docker compose up -d --build</code></td></tr>
+</table>
+
+<h3>Small code fixes, only if the app has them</h3>
+<pre><code>// a router with real URLs (/settings, /profile)
+&lt;BrowserRouter basename={import.meta.env.BASE_URL}&gt;
+
+// code that writes /api/... or /logo.png
+const API = import.meta.env.VITE_API_BASE || `${import.meta.env.BASE_URL}api`
+&lt;img src={`${import.meta.env.BASE_URL}logo.png`} /&gt;</code></pre>
+<div class="box warn"><b class="t">One exception for backends</b><p>If the backend itself writes web pages or redirects (for example <code>redirect("/login")</code>), those links also need the path. Backends that only return JSON are not affected.</p></div>
+
+<!-- 8 -->
+<h2 id="summary"><span class="n">8</span>Summary</h2>
+<ol>
+  <li>The gateway is <b>one door</b> (port 8280) with a <b>path per project</b>.</li>
+  <li>You add a project in the <b>dashboard</b>; the manager builds the nginx settings from all projects.</li>
+  <li>Every change is <b>checked, backed up, tested and reloaded gracefully</b>; a failure leaves the old settings running.</li>
+  <li>Projects keep running as they are, on <code>127.0.0.1</code>, so only the gateway can reach them.</li>
+  <li>Your <b>frontend</b> needs its <b>base path</b>; your <b>backend needs nothing</b>.</li>
+</ol>
+
+<footer>The full step-by-step pages are in the dashboard under <b>Docs</b> (files in the <code>docs/</code> folder).</footer>
+</div>
+</body>
+</html>

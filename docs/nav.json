@@ -3,10 +3,7 @@
     {
       "title": "Getting started",
       "pages": [
-        {"slug": "welcome", "title": "Welcome", "file": "welcome.md", "summary": "What the gateway is and who these docs are for"},
-        {"slug": "how-it-works", "title": "How it works", "file": "how-it-works.md", "summary": "One door, many paths: the idea behind everything"},
-        {"slug": "quick-start", "title": "Quick start", "file": "quick-start.md", "summary": "Put your first project online in 10 minutes"},
-        {"slug": "glossary", "title": "Glossary", "file": "glossary.md", "summary": "Every technical word explained simply"}
+        {"slug": "getting-started", "title": "Getting started", "file": "getting-started.md", "summary": "How the gateway works and how to add a project"}
       ]
     },
     {
